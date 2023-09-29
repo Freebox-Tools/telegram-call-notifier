@@ -7,6 +7,7 @@ var bot = new Telegraf(process.env.BOT_TOKEN)
 var id = process.env.TELEGRAM_ID
 var ffmpeg = require('ffmpeg');
 const { exec } = require("child_process");
+
 // Supabase
 var { createClient } = require("@supabase/supabase-js")
 var supabase = createClient(process.env.SUPABASE_LINK, process.env.SUPABASE_PUBLIC_KEY)
@@ -19,7 +20,7 @@ var waitingForReplies = []
 
 // On initialise le client
 const freebox = new FreeboxClient({
-	appId: 'fbx.telegram_notifier',
+	appId: 'fbx.notifier',
 	appToken: process.env.FREEBOX_TOKEN,
 	apiDomain: process.env.FREEBOX_DOMAIN,
 	httpsPort: process.env.FREEBOX_PORT
@@ -411,19 +412,15 @@ async function sendVoicemail(ctx) {
 		})
 
 		// Convertir un fichier .wav en .mp3
-		var process = new ffmpeg(file);
-		process.then(function (audio) {
-			audio.fnExtractSoundToMP3(`${randomid}_audio.mp3`, async function (error, file) {
-				if (!error) {
-					await ctx.replyWithVoice({ source: file }).catch(err => { })
-				}
-			});
-		}, function (err) {
-			console.log('Error: ' + err);
+		var audio = await new ffmpeg(file);
+		audio.fnExtractSoundToMP3(`${randomid}_audio.mp3`, async function (error, file) {
+			if (!error) {
+				fs.unlinkSync(`${randomid}_audio.wav`)
+				await ctx.replyWithVoice({ source: file }).catch(err => { })
+				fs.unlinkSync(`${randomid}_audio.mp3`)
+			} else await ctx.replyWithVoice({ source: file }).catch(err => { })
 		});
 	} catch (err) {
 		ctx.reply("Impossible de récupérer le message vocal : " + err.message).catch(err => { })
 	}
-	// TODO: SUPPRIMER LES FICHIERS GÉNÉRÉS
-
 }
