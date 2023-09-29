@@ -12,6 +12,7 @@
 	"dependencies": {
 		"@supabase/supabase-js": "^2.21.0",
 		"dotenv": "^16.0.3",
+		"ffmpeg": "^0.0.4",
 		"freebox-wrapper": "^1.0.2",
 		"telegraf": "^4.14.0"
 	},
