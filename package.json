@@ -12,7 +12,8 @@
 	"dependencies": {
 		"@supabase/supabase-js": "^2.21.0",
 		"dotenv": "^16.0.3",
-		"freebox-wrapper": "^1.0.2"
+		"freebox-wrapper": "^1.0.2",
+		"telegraf": "^4.14.0"
 	},
 	"devDependencies": {
 		"eslint": "^8.50.0",
