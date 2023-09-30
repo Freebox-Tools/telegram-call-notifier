@@ -10,7 +10,6 @@ const { exec } = require("child_process");
 
 // Supabase
 var { createClient } = require("@supabase/supabase-js");
-const { send } = require("process");
 var supabase = createClient(process.env.SUPABASE_LINK, process.env.SUPABASE_PUBLIC_KEY)
 
 // TODO: on précisera dans Le README qu'il faut pas leak la SUPABASE_PUBLIC_KEY mm si le nom indique qu'elle est publique, c'est pas vrm le cas
@@ -131,7 +130,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 	// Commande voicemail
 	bot.command('voicemail', async (ctx) => {
-		await sendVoicemail(ctx);
+		await sendVoicemail();
 	})
 
 	// Commande createcontact
@@ -184,19 +183,26 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 			url: "v10/call/voicemail/",
 			parseJson: true
 		});
+		count = response?.result?.length || 0
+
 		// Récupérer le dernier
+		response.result = response?.result?.sort((a, b) => b.date - a.date)
 		response = response?.result?.[0] || null
-		// Si null
+
+		// Si on a pas de messages vocaux
 		if (!response) return ctx.answerCbQuery("Vous n'avez aucun message vocal.").catch(err => { })
+
 		// Supprimer le message vocal
 		var { error } = await freebox.fetch({
 			method: "DELETE",
 			url: `v10/call/voicemail/${response.id}/`
 		})
-		// Si erreur
-		if (error) return ctx.answerCbQuery("Impossible de supprimer le message vocal : " + error.message).catch(err => { })
-		// Répondre
-		ctx.answerCbQuery("Le message vocal a bien été supprimé.").catch(err => { })
+
+		// Si on a pas pu supprimer le vocal
+		if (error) return ctx.answerCbQuery("Impossible de supprimer le message vocal : " + error.msg || error.message || error).catch(err => { })
+
+		// Répondre en disant qu'il a bien été supprimé
+		ctx.answerCbQuery(`Le message vocal a bien été supprimé. Il vous reste ${count - 1} message${count - 1 > 1 ? "s" : ""} vocal${count - 1 > 1 ? "s" : ""}.`).catch(err => { })
 	})
 
 	// Détecter l'envoi d'un message
@@ -300,68 +306,99 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 main().catch((err) => console.error(err));
 
 async function logVoices() {
+	// Obtenir les derniers appels
 	var response = await freebox.fetch({
 		method: "GET",
 		url: "v10/call/voicemail/",
 		parseJson: true
 	});
 
-	// Récupérer la taille du tableau
+	// Récupérer le nombre de messages vocaux, et la durée du dernier
 	var length = response?.result?.length || 0
-	var duration = 0
+	var messageId = response?.result?.[0]?.id || null
+	var duration = null // nécessaire car l'API envoie les vocaux avant qu'ils soient finalisés
+	var duration2 = null // on doit vérifier deux fois que la durée a changé pour être sûr que le vocal est finalisé
+	var lastVoicemailId = null
+	var gotOne = false
+
+	// On récupère le dernier message vocal envoyé depuis la base de données
+	var { data, error } = await supabase.from("users").select("lastVoicemailId").eq("userId", id)
+	console.log(data, error)
+	if(data?.[0]?.lastVoicemailId) lastVoicemailId = data[0].lastVoicemailId
+
+	// Boucle infinie qui vérifie si un nouveau message vocal est reçu
 	while (true) {
+		console.log("Vérification des messages vocaux...") // TODO
 		// Obtenir les derniers appels
 		var response = await freebox.fetch({
 			method: "GET",
 			url: "v10/call/voicemail/",
 			parseJson: true
 		})
+		if(response?.result?.length) response = response.result.sort((a, b) => b.date - a.date)
 
 		// Récupérer la taille du tableau
-		var newLength = response?.result?.length || 0
-
-		// Si il est vide, on continue
-		if (!newLength) continue
-		// Si il y a une différence, on met à jour la taille
-		if (newLength < length) { length = newLength; continue }
-		// Si il est plus grand que l'ancien, on continue
-		if (newLength > length) {
-			// Il faut vérifier si l'enregistrement du message vocal est terminé
-			// On récupère la durée du message vocal et on vérifie si elle a changé entre la dernière seconde et maintenant
-			var response = await freebox.fetch({
-				method: "GET",
-				url: "v10/call/voicemail/",
-				parseJson: true
-			});
-			if (!response.success) return console.log("Impossible de récupérer les derniers messages : ", response.msg || response)
-
-			duration = response?.result?.[0]?.duration || null
-
-			// Obtenir les derniers messages
-			var response = await freebox.fetch({
-				method: "GET",
-				url: "v10/call/voicemail/",
-				parseJson: true
-			})
-			// Si il y a une erreur, informer l'utilisateur
-			// Peut arriver si l'utilisateur a déconnecté l'app depuis son Freebox OS, ou que sa box down
-			if (!response.success) return console.log("Impossible de récupérer les derniers messages du répondeur : ", response.msg || response)
-
-			// Si le dernier vocal est différent du dernier vocal enregistré
-			response = response?.result?.[0] || null
-
-			// Attendre 10 secondes
-			await new Promise(r => setTimeout(r, 10000));
-			// // Si au bout de 10 secondes le message vocal n'est pas terminé, on continue
-			if (response?.duration != duration) {
-				console.log("le vocal n'a pas l'air terminé")
-				duration = response?.duration
-				continue
-			} else {
-				console.log("le vocal est terminé")
-				return
-			}
+		var newLength = response?.length || 0
+console.log(newLength, length, messageId, response?.[0]?.id)
+// TODO: ça aussi faut l'enlever plus tard mais j'laisse au cas où
+		// Si on a pas de vocs, on continue
+		if (!newLength){
+			if(newLength != length) length = newLength // On met à jour la taille
+			await new Promise(r => setTimeout(r, 5000)); // on attend 5 secondes
+			continue
 		}
+
+		// Si on a un NOUVEAU message vocal
+		if (newLength > length && messageId != response?.[0]?.id) {
+			// On obtient l'ID du dernier message vocal
+			messageId = response?.[0]?.id || null
+			duration = response?.[0]?.duration || null
+			gotOne = true
+			length = newLength // On met à jour la taille
+			console.log("Nouveau message vocal !") // TODO
+			await new Promise(r => setTimeout(r, 11000)); // on attend 11 secondes avant de retenter d'obtenir les vocs
+			continue
+		}
+
+		// Si on a des vocaux en moins
+		else if (newLength < length) {
+			length = newLength // On met à jour la taille
+			continue // On continue
+		}
+
+		// Si on a autant de vocaux
+		else if (newLength == length && gotOne) {
+			// On obtient la nouvelle durée
+			var newDuration = response?.[0]?.duration || null
+console.log('\nnewDuration', newDuration, '\nduration', duration, '\nduration2', duration2, '\nlastVoicemailId', lastVoicemailId, '\nmessageId', messageId)
+// TODO: j'laisse le console.log temporairement au cas où ça bug à un moment random
+			// Si la durée a changé deux fois, on déduit que le vocal est finalisé
+			if (newDuration == duration2 && lastVoicemailId != messageId) {
+				console.log("Message vocal finalisé !") // TODO
+				// On envoie le message vocal
+				gotOne = false
+				duration = newDuration
+				lastVoicemailId = messageId
+				await sendVoicemail(messageId, response?.[0]?.phone_number || null)
+
+				// On enregistre que le message vocal a été envoyé
+				var { error } = await supabase.from("users").update({ lastVoicemailId: messageId }).match({ userId: id })
+				if (error) console.log(error)
+
+				// On attend 15 secondes avant de retenter d'obtenir les vocs
+				await new Promise(r => setTimeout(r, 15000));
+				continue
+			}
+
+			// Si la durée a changé qu'une fois, on met à jour la durée
+			else if (newDuration == duration && lastVoicemailId != messageId){
+				console.log("Message vocal ptet finalisé on va attendre encore") // TODO
+				duration2 = newDuration
+			} else duration = newDuration
+		}
+
+		// On attend 5 secondes avant de retenter d'obtenir les vocs
+		await new Promise(r => setTimeout(r, 5000));
 	}
 }
 
@@ -464,70 +501,101 @@ async function myNumber() {
 }
 
 // Envoyer le dernier message vocal dans le répondeur
-async function sendVoicemail() {
+async function sendVoicemail(voiceId, number) {
 	// Obtenir les messages vocaux
-	var response = await freebox.fetch({
-		method: "GET",
-		url: "v10/call/voicemail/",
-		parseJson: true
-	});
+	if(!voiceId){
+		var response = await freebox.fetch({
+			method: "GET",
+			url: "v10/call/voicemail/",
+			parseJson: true
+		});
 
-	// Si on a une erreur
-	if (!response.success) return bot.telegram.sendMessage(id, "Impossible de récupérer les derniers appels : ", response.msg || response).catch(err => { })
+		// Si on a une erreur
+		if (!response.success) return bot.telegram.sendMessage(id, "Impossible de récupérer les derniers appels : ", response.msg || response).catch(err => { })
 
-	// On trie pour avoir le plus récent
-	response = response?.result || []
-	response = response.sort((a, b) => b.date - a.date)
+		// On trie pour avoir le plus récent
+		response = response?.result || []
+		response = response.sort((a, b) => b.date - a.date)
 
-	// Si on a rien
-	if (!response.length) return bot.telegram.sendMessage(id, "Vous n'avez aucun message vocal.").catch(err => { })
+		// Si on a rien
+		if (!response.length) return bot.telegram.sendMessage(id, "Vous n'avez aucun message vocal.").catch(err => { })
+
+		// On récupère le dernier
+		voiceId = response?.[0]?.id || null
+		number = response?.[0]?.phone_number || null
+	}
+
+	// On rend le numéro de téléphone plus lisible
+	if(!number) number = "Numéro masqué"
+	if(number.length && !number.startsWith("0") && !number.startsWith("N")) number = "0" + number
+	if(number.length == 10) number = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
 
 	// On télécharge le message vocal
 	var responseAudio = await freebox.fetch({
 		method: "GET",
-		url: `v10/call/voicemail/${response?.[0]?.id}/audio_file/`
+		url: `v10/call/voicemail/${voiceId}/audio_file/`
 	})
 	// (au cas où y'a une erreur de l'API et donc on peut pas obtenir le buffer)
 	try {
 		// On récupère le buffer
 		responseAudio = await responseAudio.buffer()
 
-		// On l'enregistre
+		// On prépare les infos pour enregistrer le fichier
 		var randomid = Math.floor(Math.random() * 1000000).toString()
 		var file = `${randomid}_audio.wav`
+
 		// On écrit les données dans le fichier
-		fs.writeFile(`${randomid}_audio.wav`, responseAudio, function (err) {
-			if (err) throw err
-		})
+		fs.writeFileSync(file, responseAudio)
 
 		// Convertir un fichier .wav en .mp3
 		var audio = await new ffmpeg(file);
 		// Afficher une information à l'utilisateur
-		audio.fnExtractSoundToMP3(`${randomid}_audio.mp3`, async function (error, file) {
+		audio.fnExtractSoundToMP3(`${randomid}_audio.mp3`, async function (error) {
 			// Créé un bouton pour supprimer le message vocal
 			var replyMarkup = {
 				inline_keyboard: [
 					[{
-						text: "Supprimer le dernier message du répondeur.",
+						text: "Supprimer le dernier message du répondeur",
 						callback_data: `delete-voicemail`
 					}]
 				]
-			};
+			}
+
+			// Si on a pas d'erreur, envoie le mp3
 			if (!error) {
-				// Supprimer le fichier généré
-				// fs.unlinkSync(`${randomid}_audio.wav`)
 				// Envoyer le message vocal grâce à bot.telegram
-				bot.telegram.sendAudio(id, { source: file }, {
-					reply_markup: replyMarkup // Ajouter le bouton au message
+				await bot.telegram.sendAudio(id, { source: `${randomid}_audio.mp3` }, {
+					reply_markup: replyMarkup, // Ajouter le bouton au message
+					title: "Message vocal",
+					performer: number
 				}).catch(err => { })
 
-				// Supprimer le fichier généré
-				// fs.unlinkSync(`${randomid}_audio.mp3`)
-			} else await bot.telegram.sendAudio(id, { source: file }, {
-				reply_markup: replyMarkup // Ajouter le bouton au message
-			}).catch(err => { })
+				// Supprimer les fichier généré
+				try {
+					setTimeout(() => {
+						fs.unlinkSync(file)
+						fs.unlinkSync(`${randomid}_audio.mp3`)
+					}, 2000) // au cas où
+				} catch (err) { }
+			} else {
+				// On envoie le fichier wav d'origine
+				await bot.telegram.sendAudio(id, { source: file }, {
+					reply_markup: replyMarkup, // Ajouter le bouton au message
+					title: "Message vocal",
+					performer: number
+				}).catch(err => { })
+
+				// Supprimer les fichier généré
+				try {
+					setTimeout(() => {
+						fs.unlinkSync(file)
+						fs.unlinkSync(`${randomid}_audio.mp3`)
+					}, 2000) // au cas où
+				} catch (err) { }
+			}
 		});
 	} catch (err) {
-		bot.telegram.sendMessage(id, "Impossible de récupérer le message vocal : " + err.message).catch(err => { })
+		console.log(err)
+		bot.telegram.sendMessage(id, "Impossible de récupérer le message vocal : " + err.msg || err.message || err.code || err).catch(err => { })
 	}
 }
