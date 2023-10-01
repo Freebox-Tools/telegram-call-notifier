@@ -56,10 +56,11 @@ async function main() {
 	bot.launch()
 	console.log("Bot démarré !")
 
+	// Les fonctions les plus importantes
+	logCalls()
 	logVoices()
 
-	// Commencer la fonction logCalls
-	// logCalls()
+
 
 	// Commande start du bot pour une première connexion en lui expliquant au fur et à mesure
 	bot.command('start', (ctx) => {
@@ -133,6 +134,28 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 		await sendVoicemail();
 	})
 
+
+	// Commande contact
+	bot.command('contact', async (ctx) => {
+		// Si après contact il y a un nom, on execute la fonction getContact
+		if (ctx.message.text.split(" ").length > 1) {
+			var name = ctx.message.text.split(" ")[1]
+			await getContact(name, ctx)
+		}
+		// Sinon on attend la réponse de l'utilisateur 
+		else {
+			ctx.reply("Veuillez envoyer le nom du contact à chercher.").catch(err => { })
+			// On attend la réponse de l'utilisateur
+			if (waitingForReplies.find(e => e.userId == ctx.message.from.id)) waitingForReplies = waitingForReplies.filter(e => e.userId != ctx.message.from.id)
+			waitingForReplies.push({
+				userId: ctx.message.from.id,
+				created: Date.now(),
+				type: "contact",
+				ctx: ctx
+			})
+		}
+	})
+
 	// Commande createcontact
 	bot.command('createcontact', (ctx) => {
 		// Demander à l'utilisateur d'envoyer un message
@@ -147,6 +170,28 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 			ctx: ctx
 		})
 	})
+
+	// Commande deletecontact
+	bot.command('deletecontact', async (ctx) => {
+		// Si après deletecontact il y a un nom, on execute la fonction deleteContact
+		if (ctx.message.text.split(" ").length > 1) {
+			var name = ctx.message.text.split(" ")[1]
+			await deleteContact(name, ctx)
+		}
+		// Sinon on attend la réponse de l'utilisateur
+		else {
+			ctx.reply("Veuillez envoyer le nom du contact à supprimer.").catch(err => { })
+			// On attend la réponse de l'utilisateur
+			if (waitingForReplies.find(e => e.userId == ctx.message.from.id)) waitingForReplies = waitingForReplies.filter(e => e.userId != ctx.message.from.id)
+			waitingForReplies.push({
+				userId: ctx.message.from.id,
+				created: Date.now(),
+				type: "deletecontact",
+				ctx: ctx
+			})
+		}
+	})
+
 
 	// Commande mynumber
 	bot.command('mynumber', async (ctx) => {
@@ -205,6 +250,18 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 		ctx.answerCbQuery(`Le message vocal a bien été supprimé. Il vous reste ${count - 1} message${count - 1 > 1 ? "s" : ""} vocal${count - 1 > 1 ? "s" : ""}.`).catch(err => { })
 	})
 
+	// Action du bouton "Supprimer le contact"
+	bot.action('deletecontact', async (ctx) => {
+		// Déterminer le nom du contact
+		var message = ctx.callbackQuery.message.text
+		// Le nom se trouve après Numéro du contact et se trouve entre guillemet
+		var name = message.split("Numéro du contact")[1].split('"')[1].trim()
+		// Supprimer le contact
+		await deleteContact(name, ctx)
+		// Supprimer le message
+		ctx.deleteMessage().catch(err => { })
+	})
+
 	// Détecter l'envoi d'un message
 	// Note: Ce code doit rester en dessous des autres commandes.
 	bot.on('message', async (ctx) => {
@@ -237,6 +294,10 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 				// Si il n y a pas de virgule expliquez comment il faut faire.
 				if (!name) return ctx.replyWithHTML("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : <b>Jean</b>, 0123456789").catch(err => { })
 				if (!num) return ctx.replyWithHTML("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : Jean, <b>0123456789</b>").catch(err => { })
+				// Enlever les espaces du numéro
+				num = num.trim()
+				// Si numero ne contient pas que des chiffres
+				if (num.match(/[^0-9]/g)) return ctx.reply("Le numéro ne peut contenir que des chiffres.").catch(err => { })
 
 				// On créé le contact
 				var created = await createContact(name, num);
@@ -259,6 +320,27 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 				// On supprime l'attente
 				waitingForReplies = waitingForReplies.filter(e => e.userId != author)
 			}
+			else if (type == "contact") { // Si on attend une réponse pour chercher un contact
+				// On récupère le nom
+				var name = text;
+
+				// On récupère le contact
+				await getContact(name, ctx)
+
+				// On supprime l'attente
+				waitingForReplies = waitingForReplies.filter(e => e.userId != author)
+			}
+			else if (type == "deletecontact") { // Si on attend une réponse pour supprimer un contact
+				// On récupère le nom
+				var name = text;
+
+				// On supprime le contact
+				await deleteContact(name, ctx)
+
+				// On supprime l'attente
+				waitingForReplies = waitingForReplies.filter(e => e.userId != author)
+			}
+
 		} else { // Si c'est un code valide :
 			// Obtenir le code unique dans la base de données
 			var { data, error } = await supabase.from("uniquecode").select("*").eq("code", text)
@@ -323,27 +405,26 @@ async function logVoices() {
 
 	// On récupère le dernier message vocal envoyé depuis la base de données
 	var { data, error } = await supabase.from("users").select("lastVoicemailId").eq("userId", id)
-	console.log(data, error)
-	if(data?.[0]?.lastVoicemailId) lastVoicemailId = data[0].lastVoicemailId
+	if (data?.[0]?.lastVoicemailId) lastVoicemailId = data[0].lastVoicemailId
 
 	// Boucle infinie qui vérifie si un nouveau message vocal est reçu
 	while (true) {
-		console.log("Vérification des messages vocaux...") // TODO
+		// console.log("Vérification des messages vocaux...") // TODO
 		// Obtenir les derniers appels
 		var response = await freebox.fetch({
 			method: "GET",
 			url: "v10/call/voicemail/",
 			parseJson: true
 		})
-		if(response?.result?.length) response = response.result.sort((a, b) => b.date - a.date)
+		if (response?.result?.length) response = response.result.sort((a, b) => b.date - a.date)
 
 		// Récupérer la taille du tableau
 		var newLength = response?.length || 0
-console.log(newLength, length, messageId, response?.[0]?.id)
-// TODO: ça aussi faut l'enlever plus tard mais j'laisse au cas où
+		// console.log(newLength, length, messageId, response?.[0]?.id)
+		// TODO: ça aussi faut l'enlever plus tard mais j'laisse au cas où
 		// Si on a pas de vocs, on continue
-		if (!newLength){
-			if(newLength != length) length = newLength // On met à jour la taille
+		if (!newLength) {
+			if (newLength != length) length = newLength // On met à jour la taille
 			await new Promise(r => setTimeout(r, 5000)); // on attend 5 secondes
 			continue
 		}
@@ -370,8 +451,8 @@ console.log(newLength, length, messageId, response?.[0]?.id)
 		else if (newLength == length && gotOne) {
 			// On obtient la nouvelle durée
 			var newDuration = response?.[0]?.duration || null
-console.log('\nnewDuration', newDuration, '\nduration', duration, '\nduration2', duration2, '\nlastVoicemailId', lastVoicemailId, '\nmessageId', messageId)
-// TODO: j'laisse le console.log temporairement au cas où ça bug à un moment random
+			console.log('\nnewDuration', newDuration, '\nduration', duration, '\nduration2', duration2, '\nlastVoicemailId', lastVoicemailId, '\nmessageId', messageId)
+			// TODO: j'laisse le console.log temporairement au cas où ça bug à un moment random
 			// Si la durée a changé deux fois, on déduit que le vocal est finalisé
 			if (newDuration == duration2 && lastVoicemailId != messageId) {
 				console.log("Message vocal finalisé !") // TODO
@@ -391,7 +472,7 @@ console.log('\nnewDuration', newDuration, '\nduration', duration, '\nduration2',
 			}
 
 			// Si la durée a changé qu'une fois, on met à jour la durée
-			else if (newDuration == duration && lastVoicemailId != messageId){
+			else if (newDuration == duration && lastVoicemailId != messageId) {
 				console.log("Message vocal ptet finalisé on va attendre encore") // TODO
 				duration2 = newDuration
 			} else duration = newDuration
@@ -435,6 +516,16 @@ async function logCalls() {
 			// On obtient les infos, et on définit l'ID du dernier appel enregistré
 			number = response.number;
 			var name = response.name;
+
+			if (name == number && number.length == 10) {
+				name = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
+				number = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
+			}
+
+			if (name != number && number.length == 10) {
+				number = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
+			}
+
 			lastID = response.id;
 
 			// On ignore les appels qui ne sont pas entrants
@@ -442,7 +533,7 @@ async function logCalls() {
 
 			// Si l'appel est entrant
 			var replyMarkup = null;
-			if (number == name) {
+			if (number == name && number) {
 				replyMarkup = {
 					inline_keyboard: [
 						[{
@@ -452,7 +543,7 @@ async function logCalls() {
 					]
 				};
 			}
-			bot.telegram.sendMessage(id, `Nouvel appel entrant de ${name || "Numéro masqué"}${number != name ? ` (${number || "Numéro masqué"})` : ''}`, {
+			bot.telegram.sendMessage(id, `Nouvel appel entrant de ${name || "Numéro masqué"}${number != name ? ` \n${number || "Numéro masqué"}` : ''}`, {
 				reply_markup: replyMarkup
 			});
 		}
@@ -500,10 +591,94 @@ async function myNumber() {
 	return response?.result?.phone_number;
 }
 
+async function getContact(name, ctx) {
+	// On récupère les contacts
+	var response = await freebox.fetch({
+		method: "GET",
+		url: "v10/contact/",
+		parseJson: true
+	});
+
+	// Si on a une erreur
+	if (!response.success) return ctx.reply("Impossible de récupérer les contacts : ", response.msg || response).catch(err => { })
+
+	// Si l'entrée de l'utilisateur correspond au firstname ou lastname d'un contact
+	var contacts = response?.result || []
+	var contact = contacts.find(e => e.first_name == name || e.last_name == name || e.display_name == name)
+
+	// Si on a pas de contact
+	if (!contact) return ctx.reply("Aucun contact trouvé.").catch(err => { })
+
+	// On récupère les numéros du contact
+	var response = await freebox.fetch({
+		method: "GET",
+		url: `v10/contact/${contact.id}/numbers/`,
+		parseJson: true
+	});
+
+	// Si on a une erreur
+	if (!response.success) return ctx.reply("Impossible de récupérer les numéros du contact : ", response.msg || response).catch(err => { })
+
+	// Si on a pas de numéros
+	var numbers = response?.result || []
+	if (!numbers.length) return ctx.reply("Le contact existe mais aucun numéro n'a été trouvé.").catch(err => { })
+
+	// On envoie le ou les numéros
+	var message = `Numéro${numbers.length > 1 ? "s" : ""} du contact "${contact.display_name || contact.first_name + contact.last_name}" :\n`
+	numbers.forEach(e => {
+		message += `${e.number}\n`
+	})
+
+	// Ajouter un bouton pour supprimer le contact
+	var replyMarkup = {
+		inline_keyboard: [
+			[{
+				text: "Supprimer le contact",
+				callback_data: `deletecontact`
+			}]
+		]
+	}
+	// Envoyer le message avec le bouton
+	ctx.reply(message, { reply_markup: replyMarkup }).catch(err => { })
+}
+
+
+async function deleteContact(name, ctx) {
+	// On récupère les contacts
+	var response = await freebox.fetch({
+		method: "GET",
+		url: "v10/contact/",
+		parseJson: true
+	});
+
+	// Si on a une erreur
+	if (!response.success) return ctx.reply("Impossible de récupérer les contacts : ", response.msg || response).catch(err => { })
+
+	// Si l'entrée de l'utilisateur correspond au firstname ou lastname d'un contact
+	var contacts = response?.result || []
+	var contact = contacts.find(e => e.first_name == name || e.last_name == name || e.display_name == name)
+
+	// Si on a pas de contact
+	if (!contact) return ctx.reply("Aucun contact trouvé.").catch(err => { })
+
+	// On supprime le contact
+	var response = await freebox.fetch({
+		method: "DELETE",
+		url: `v10/contact/${contact.id}/`,
+		parseJson: true
+	});
+
+	// Si on a une erreur
+	if (!response.success) return ctx.reply("Impossible de supprimer le contact : ", response.msg || response).catch(err => { })
+
+	// On informe l'utilisateur que le contact a bien été supprimé
+	ctx.reply("Le contact a bien été supprimé.").catch(err => { })
+}
+
 // Envoyer le dernier message vocal dans le répondeur
 async function sendVoicemail(voiceId, number) {
 	// Obtenir les messages vocaux
-	if(!voiceId){
+	if (!voiceId) {
 		var response = await freebox.fetch({
 			method: "GET",
 			url: "v10/call/voicemail/",
@@ -525,10 +700,17 @@ async function sendVoicemail(voiceId, number) {
 		number = response?.[0]?.phone_number || null
 	}
 
+	// On récupère les contacts
+	var response = await freebox.fetch({
+		method: "GET",
+		url: "v10/contact/",
+		parseJson: true
+	});
+
 	// On rend le numéro de téléphone plus lisible
-	if(!number) number = "Numéro masqué"
-	if(number.length && !number.startsWith("0") && !number.startsWith("N")) number = "0" + number
-	if(number.length == 10) number = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
+	if (!number) number = "Numéro masqué"
+	if (number.length && !number.startsWith("0") && !number.startsWith("N")) number = "0" + number
+	if (number.length == 10) number = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
 
 	// On télécharge le message vocal
 	var responseAudio = await freebox.fetch({
