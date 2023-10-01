@@ -15,7 +15,8 @@ Call Notifier vous informe avant même que votre téléphone ne sonne ! Il indiq
 - Envoie un message vocal lorsque votre correspondant laisse un message sur votre répondeur.
 - Afficher votre numéro de téléphone fixe.
 - Ajouter un numéro et un nom dans votre répertoire.
-
+- Ajouter un contact dans votre répertoire.
+- Supprimer un contact de votre répertoire
 
 ## À savoir
 
