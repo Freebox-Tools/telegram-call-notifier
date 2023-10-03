@@ -15,26 +15,70 @@ var supabase = createClient(process.env.SUPABASE_LINK, process.env.SUPABASE_PUBL
 // Obtenir tout les utilisateurs
 var users = []
 async function getSupabaseUsers() {
+	// On obtient les utilisateurs
 	var { data, error } = await supabase.from("users").select("*")
 	if (error) return console.log(error)
-	users = data
+	users = data // on enregistre
+
+	// On supprime les boxs déjà connectées qui n'existent plus
+	freeboxs = freeboxs.filter(e => users.find(f => f.userId == e.userId && f.id == e.id))
+
+	// On s'authentifier sur toutes les boxs pas encore connectées
+	for (const user of users) {
+		// Si on a déjà cette box, on passe
+		if (freeboxs.find(e => e.userId == user.userId && e.id == user.id)) continue
+
+		// On initialise le client
+		const freebox = new FreeboxClient({
+			appId: user.appId,
+			appToken: user.appToken,
+			apiDomain: user.apiDomain,
+			httpsPort: user.httpsPort
+		})
+
+		// On s'authentifie
+		var response = await freebox.authentificate()
+		if (!response?.success){
+			// On prévient l'utilisateur
+			bot.telegram.sendMessage(user.userId, "Nous n'avons pas pu vous connecter à votre Freebox. Nous réessayerons plus tard. Si le problème persiste, veuillez vous déconnecter et vous reconnecter.").catch(err => {
+				console.log(`Impossible de contacter l'utilisateur ${user.userId} : `, err)
+				return disconnectBox(user.userId, user.id)
+			})
+		}
+		else console.log(`Connecté à la Freebox ${getFreeboxName(user.boxModel)} pour l'utilisateur ${user.userId}.`)
+
+		// On ajoute la Freebox à la liste
+		freeboxs.push({
+			client: freebox,
+			userId: user.userId,
+			chatId: user.chatId,
+			lastVoicemailId: user.lastVoicemailId,
+			id: user.id
+		})
+
+		// On attend 1 seconde avant de continuer
+		await new Promise(r => setTimeout(r, 1000));
+	}
+
+	// On retourne que c'est bon
+	return true
 }
-getSupabaseUsers() // TODO: on réeffectuera cette fonction toutes les 4 minutes pour être sûr d'avoir les dernières données à chaque fois
-// TODO: dans les while true on va faire un forEach sur users pour envoyer les messages à tout le monde
+
+// Mettre à jour les données périodiquement
+setInterval(() => getSupabaseUsers(), 1000 * 60 * 5)
+
+// Liste des boxs connectées
+var freeboxs = []
+
+// TODO: on met une erreur qd le gars utilise une cmd alors qu'il est pas co
 
 // TODO: on précisera dans Le README qu'il faut pas leak la SUPABASE_PUBLIC_KEY mm si le nom indique qu'elle est publique, c'est pas vrm le cas
 // TODO: on précisera aussi dans le README d'activer les RLS (voir celle déjà définit dans la base de données)
 
+// TODO: on testera que le bot NE marche PAS sur des groupes / sur des canaux
+
 // Liste des réponses d'utilisateur qu'on attend
 var waitingForReplies = []
-
-// On initialise le client
-const freebox = new FreeboxClient({
-	appId: 'fbx.notifier',
-	appToken: process.env.FREEBOX_TOKEN,
-	apiDomain: process.env.FREEBOX_DOMAIN,
-	httpsPort: process.env.FREEBOX_PORT
-})
 
 // Liste des noms des Freebox
 function getFreeboxName(name) {
@@ -42,31 +86,43 @@ function getFreeboxName(name) {
 	if (name.includes("Freebox Delta")) return "Freebox Delta"
 	if (name.includes("Freebox Pop")) return "Freebox Pop"
 	if (name.includes("Freebox Révolution") || name.includes("Freebox Revolution")) return "Freebox Révolution"
-	if (name.includes("Freebox One")) return "Freebox One"
 	if (name.includes("Freebox Server")) return "Freebox Server"
 	return "Freebox"
+}
+
+// Fonction pour déconnecter la box d'un utilisateur
+async function disconnectBox(userId, boxId) {
+	// On supprime les infos de l'utilisateur
+	var { error } = await supabase.from("users").delete().match({ userId: userId })
+	if (error){
+		var { error } = await supabase.from("users").delete().match({ id: boxId })
+		if (error) return false
+	}
+
+	// On supprime la box de la liste
+	freeboxs = freeboxs.filter(e => e.userId != userId && e.id != boxId)
+
+	// On retourne les infos de l'utilisateur
+	return true
 }
 
 // Si ffmpeg n'est pas installé avertir l'utilisateur	
 exec("ffmpeg -version", (error) => {
 	if (error) {
-		console.warn("WARN: ffmpeg n'a pas été détecté dans votre système. Il se peut donc que vous ne puissiez pas écouter vos messages vocaux.")
+		console.warn("WARN: ffmpeg n'a pas été détecté dans votre système. Il se peut donc que vous ne puissiez pas envoyer de messages vocaux.")
 	}
 });
 
 // Fonction principale
 async function main() {
-	// On s'authentifie
-	var response = await freebox.authentificate()
-
-	// Si on a pas pu s'authentifier
-	if (!response?.success) return console.log("Impossible de se connecter à la Freebox : ", response.msg || response)
+	// Connecter le bot
+	bot.launch()
+	await getSupabaseUsers()
 
 	// Lancer le bot
-	bot.launch()
-	console.log("Bot démarré !")
+	console.log(`Démarré ! ${freeboxs.length} freebox${freeboxs.length > 1 ? "s" : ""} connectée${freeboxs.length > 1 ? "s" : ""}.`)
 
-	// Les fonctions les plus importantes
+	// Fonctions importantes qui s'exécutent en temps réel
 	logCalls()
 	logVoices()
 
@@ -122,25 +178,18 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 		// Si on confirme
 		bot.action(`yes-${id}`, async (ctx) => {
 			// Supprimer les informations de la base de données
-			var { error } = await supabase.from("users").delete().match({ userId: ctx?.update?.callback_query?.from?.id })
-			if (error) return ctx.answerCbQuery("Une erreur est survenue lors de la déconnexion : " + error.message).catch(err => { })
+			await disconnectBox(ctx?.update?.callback_query?.from?.id)
 
 			// Répondre et supprimer le message
 			ctx.deleteMessage().catch(err => { })
 			ctx.reply("Vous avez été déconnecté. Une attente de quelques minutes est nécessaire avant la suppression totale de vos données.").catch(err => { })
-
-			// On se décconecte de la Freebox (on vérifie pas l'erreur)
-			await freebox.fetch({
-				method: "POST",
-				url: "v10/login/logout/",
-				parseJson: true
-			})
+			await getSupabaseUsers() // On met à jour les utilisateurs
 		})
 	})
 
 	// Commande voicemail
 	bot.command('voicemail', async (ctx) => {
-		await sendVoicemail();
+		await sendVoicemail(ctx.from.id)
 	})
 
 	// Commande contact
@@ -202,7 +251,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 	// Commande mynumber
 	bot.command('mynumber', async (ctx) => {
-		ctx.reply("Votre numéro de téléphone fixe est le : " + await myNumber()).catch(err => { })
+		ctx.reply("Votre numéro de téléphone fixe est le : " + await myNumber(ctx)).catch(err => { })
 	})
 
 	// Action du bouton "Créer un contact"
@@ -229,8 +278,12 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 	})
 
 	bot.action('delete-voicemail', async (ctx) => {
+		// Obtenir les infos sur l'utilisateur
+		const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
+		const freebox = freeboxs.find(e => e.userId == userId)
+
 		// Récupérer les messages vocaux
-		var response = await freebox.fetch({
+		var response = await freebox?.client?.fetch({
 			method: "GET",
 			url: "v10/call/voicemail/",
 			parseJson: true
@@ -245,7 +298,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 		if (!response) return ctx.answerCbQuery("Vous n'avez aucun message vocal.").catch(err => { })
 
 		// Supprimer le message vocal
-		var { error } = await freebox.fetch({
+		var { error } = await freebox?.client?.fetch({
 			method: "DELETE",
 			url: `v10/call/voicemail/${response.id}/`
 		})
@@ -304,13 +357,15 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 				// Si il n y a pas de virgule expliquez comment il faut faire.
 				if (!name) return ctx.replyWithHTML("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : <b>Jean</b>, 0123456789").catch(err => { })
 				if (!num) return ctx.replyWithHTML("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : Jean, <b>0123456789</b>").catch(err => { })
+
 				// Enlever les espaces du numéro
 				num = num.trim()
+
 				// Si numero ne contient pas que des chiffres
 				if (num.match(/[^0-9]/g)) return ctx.reply("Le numéro ne peut contenir que des chiffres.").catch(err => { })
 
 				// On créé le contact
-				var created = await createContact(name, num);
+				var created = await createContact(name, num, ctx);
 
 				// Si il y a une erreur, informer l'utilisateur
 				if (created != true) return ctx.reply(`Une erreur est survenue${created == false ? '...' : ` : ${created}`}`).catch(err => { })
@@ -321,7 +376,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 			}
 			else if (type == "createcontact-via-btn") { // Si on attend une réponse pour créer un contact via le bouton
 				// On créé le contact
-				var created = await createContact(text, waitingForReply.num);
+				var created = await createContact(text, waitingForReply.num, ctx);
 
 				// Si il y a une erreur, informer l'utilisateur
 				if (created != true) return ctx.reply(`Une erreur est survenue${created == false ? '...' : ` : ${created}`}`).catch(err => { })
@@ -380,7 +435,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 				id: Date.now() + Math.floor(Math.random() * 1000000).toString(),
 				userId: ctx.message.from.id,
 				chatId: ctx.message.chat.id,
-				appId: "fbox.notifier",
+				appId: "fbx.notifier",
 				appToken: infos?.content?.appToken,
 				apiDomain: infos?.content?.apiDomain,
 				httpsPort: infos?.content?.httpsPort,
@@ -391,195 +446,222 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 			if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu vous associer à votre Freebox. Veuillez signaler ce problème.").catch(err => { })
 
 			// On informe l'utilisateur que tout s'est bien passé
+			getSupabaseUsers() // On met à jour les utilisateurs
 			ctx.reply(`Votre compte Telegram a bien été associé à votre ${getFreeboxName(infos?.content?.boxModel)} !\n\nVous devrez peut-être attendre jusqu'à 5 minutes avant de pouvoir utiliser les commandes du bot, le temps que la synchronisation s'effectue.`).catch(err => { })
 		}
 	})
 }
 main().catch((err) => console.error(err));
 
+// Détecter en temps réel les messages vocaux
 async function logVoices() {
-	// Obtenir les derniers appels
-	var response = await freebox.fetch({
-		method: "GET",
-		url: "v10/call/voicemail/",
-		parseJson: true
-	});
-
-	// Récupérer le nombre de messages vocaux, et la durée du dernier
-	var length = response?.result?.length || 0
-	var messageId = response?.result?.[0]?.id || null
-	var duration = null // nécessaire car l'API envoie les vocaux avant qu'ils soient finalisés
-	var duration2 = null // on doit vérifier deux fois que la durée a changé pour être sûr que le vocal est finalisé
-	var lastVoicemailId = null
-	var gotOne = false
-
-	// On récupère le dernier message vocal envoyé depuis la base de données
-	var { data, error } = await supabase.from("users").select("lastVoicemailId").eq("userId", id)
-	if (data?.[0]?.lastVoicemailId) lastVoicemailId = data[0].lastVoicemailId
+	// Première itération
+	var firstIteration = true
 
 	// Boucle infinie qui vérifie si un nouveau message vocal est reçu
 	while (true) {
-		// Obtenir les derniers appels
-		var response = await freebox.fetch({
-			method: "GET",
-			url: "v10/call/voicemail/",
-			parseJson: true
-		})
-		if (response?.result?.length) response = response.result.sort((a, b) => b.date - a.date)
+		// Pour chaque box
+		for (const freebox of freeboxs) {
+			console.log("ok")
 
-		// Récupérer la taille du tableau
-		var newLength = response?.length || 0
+			// Obtenir les derniers appels
+			var response = await freebox?.client?.fetch({
+				method: "GET",
+				url: "v10/call/voicemail/",
+				parseJson: true
+			})
+			if (response?.result?.length) response = response.result.sort((a, b) => b.date - a.date)
 
-		// Si on a pas de vocs, on continue
-		if (!newLength) {
-			if (newLength != length) length = newLength // On met à jour la taille
-			await new Promise(r => setTimeout(r, 5000)); // on attend 5 secondes
-			continue
-		}
-
-		// Si on a un NOUVEAU message vocal
-		if (newLength > length && messageId != response?.[0]?.id) {
-			// On obtient l'ID du dernier message vocal
-			messageId = response?.[0]?.id || null
-			duration = response?.[0]?.duration || null
-			gotOne = true
-			length = newLength // On met à jour la taille
-			await new Promise(r => setTimeout(r, 11000)); // on attend 11 secondes avant de retenter d'obtenir les vocs
-			continue
-		}
-
-		// Si on a des vocaux en moins
-		else if (newLength < length) {
-			length = newLength // On met à jour la taille
-			continue // On continue
-		}
-
-		// Si on a autant de vocaux
-		else if (newLength == length && gotOne) {
-			// On obtient la nouvelle durée
-			var newDuration = response?.[0]?.duration || null
-
-			// Si la durée a changé deux fois, on déduit que le vocal est finalisé
-			if (newDuration == duration2 && lastVoicemailId != messageId) {
-				// On envoie le message vocal
-				gotOne = false
-				duration = newDuration
-				lastVoicemailId = messageId
-				await sendVoicemail(messageId, response?.[0]?.phone_number || null)
-
-				// On enregistre que le message vocal a été envoyé
-				var { error } = await supabase.from("users").update({ lastVoicemailId: messageId }).match({ userId: id })
-				if (error) console.log(error)
-
-				// On attend 15 secondes avant de retenter d'obtenir les vocs
-				await new Promise(r => setTimeout(r, 15000));
+			// Enregistrer dans des variables si c'est la première itération
+			if(firstIteration){
+				freebox.voicemail = {}
+				freebox.voicemail.length = response?.length || 0
+				freebox.voicemail.msgId = response?.[0]?.id || null
+				freebox.voicemail.gotOne = false
+				freebox.voicemail.duration = null // nécessaire car l'API envoie les vocaux avant qu'ils soient finalisés
+				freebox.voicemail.duration2 = null // on doit vérifier deux fois que la durée a changé pour être sûr que le vocal est finalisé
 				continue
 			}
 
-			// Si la durée a changé qu'une fois, on met à jour la durée
-			else if (newDuration == duration && lastVoicemailId != messageId) duration2 = newDuration
-			else duration = newDuration
+			// Récupérer la taille du tableau
+			var newLength = response?.length || 0
+
+			// Si on a pas de vocs, on continue
+			if (!newLength) {
+				if (newLength != freebox.voicemail.length) freebox.voicemail.length = newLength // On met à jour la taille
+				continue
+			}
+
+			// Si on a un NOUVEAU message vocal
+			if (newLength > freebox.voicemail.length && freebox.voicemail.msgId != response?.[0]?.id) {
+				// On obtient l'ID du dernier message vocal
+				console.log('nv voc')
+				freebox.voicemail.msgId = response?.[0]?.id || null
+				freebox.voicemail.duration = response?.[0]?.duration || null
+				freebox.voicemail.gotone = true
+				freebox.voicemail.length = newLength // On met à jour la taille
+				continue
+			}
+
+			// Si on a des vocaux en moins
+			else if (newLength < freebox.voicemail.length) {
+				console.log('moins de vocs')
+				freebox.voicemail.length = newLength // On met à jour la taille
+				continue // On continue
+			}
+
+			// Si on a autant de vocaux
+			else if (newLength == freebox.voicemail.length && freebox.voicemail.gotone) {
+				console.log('autant de vocs')
+				// On obtient la nouvelle durée
+				var newDuration = response?.[0]?.duration || null
+				console.log(newDuration, freebox.voicemail.duration2, freebox.lastVoicemailId, freebox.voicemail.msgId)
+
+				// Si la durée a changé deux fois, on déduit que le vocal est finalisé
+				if (newDuration == freebox.voicemail.duration2 && freebox.lastVoicemailId != freebox.voicemail.msgId) {
+					// On envoie le message vocal
+					freebox.voicemail.gotone = false
+					freebox.voicemail.duration = newDuration
+					freebox.lastVoicemailId = freebox.voicemail.msgId
+					await sendVoicemail(freebox.userId || freebox.chatId, freebox.voicemail.msgId, response?.[0]?.phone_number || null)
+
+					// On enregistre que le message vocal a été envoyé
+					var { error } = await supabase.from("users").update({ lastVoicemailId: freebox.voicemail.msgId }).match({ userId: id })
+					if (error) console.log(error)
+
+					continue
+				}
+
+				// Si la durée a changé qu'une fois, on met à jour la durée
+				else if (newDuration == freebox.voicemail.duration && freebox.lastVoicemailId != freebox.voicemail.msgId) freebox.voicemail.duration2 = newDuration
+				else freebox.voicemail.duration = newDuration
+			}
 		}
 
-		// On attend 5 secondes avant de retenter d'obtenir les vocs
+		// On met à jour la variable
+		firstIteration = false
+
+		// On attend 5 secondes avant de retenter d'obtenir les vocs (on évite de spam inutilement)
 		await new Promise(r => setTimeout(r, 5000));
 	}
 }
 
-// Notifier des appels entrants
+// Détecter en temps réel les appels entrants
 async function logCalls() {
-	// On garde une variable pour plus tard
-	var injoinable = false
-
-	// Obtenir les derniers appels
-	var response = await freebox.fetch({
-		method: "GET",
-		url: "v10/call/log/",
-		parseJson: true
-	});
-	if (!response.success) return console.log("Impossible de récupérer les derniers appels : ", response.msg || response)
-
-	// On récupère le dernier appel
-	lastID = response?.result?.[0]?.id || null
+	// Première itération
+	var firstIteration = true
 
 	// Boucle infinie qui vérifie si un nouvel appel est reçu
 	while (true) {
-		// Obtenir les derniers appels
-		var response = await freebox.fetch({
-			method: "GET",
-			url: "v10/call/log/",
-			parseJson: true
-		})
+		// Pour chaque box
+		for (const freebox of freeboxs) {
+			// On définit des variables de base
+			if(!freebox.injoinable) freebox.injoinable = false
+			if(!freebox.lastID) freebox.lastID = null
 
-		// Si la box est vrm injoinable
-		// TODO: faut tester ça en éteignant vrm sa box, j'ai juste testé de deco mon wifi ptdrr
-		if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`){
-			if(!injoinable) bot.telegram.sendMessage(id, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => { })
-			injoinable = true
-			await new Promise(r => setTimeout(r, 10000)); // On continue après 10sec (la box s'est ptet éteinte)
-			continue
-		} else {
-			// Si on était injoinable
-			if(injoinable) bot.telegram.sendMessage(id, "Votre Freebox semble de nouveau connecté à Internet !").catch(err => { })
-			injoinable = false // on est joinable
-		}
+			// Obtenir les derniers appels
+			var response = await freebox?.client?.fetch({
+				method: "GET",
+				url: "v10/call/log/",
+				parseJson: true
+			})
 
-		// Si il y a une erreur, informer l'utilisateur
-		if (!response.success) {
-			console.log("Impossible de récupérer les derniers appels : ", response.msg || response)
-			await new Promise(r => setTimeout(r, 10000)); // On continue après 10sec (la box s'est ptet éteinte)
-			continue
-		}
-
-		// On récupère le dernier appel
-		response = response?.result?.[0] || null
-
-		// Si le dernier appel est différent du dernier appel enregistré
-		if (lastID != response.id) {
-			// On obtient les infos, et on définit l'ID du dernier appel enregistré
-			var number = response.number;
-			var name = response.name;
-
-			// On met en forme le numéro
-			if (name == number && number.length == 10) {
-				name = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
-				number = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
-			}
-			if (name != number && number.length == 10) {
-				number = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
+			// Si la box est vrm injoinable
+			// TODO: faut tester ça en éteignant vrm sa box, j'ai juste testé de deco mon wifi ptdrr
+			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`){
+				if(!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
+					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
+					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
+				})
+				freebox.injoinable = true
+				continue
+			} else {
+				// Si on était injoinable
+				if(freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox semble de nouveau connecté à Internet !").catch(err => { })
+				freebox.injoinable = false // on est joinable
 			}
 
-			// On enregistre l'id de l'appel
-			lastID = response.id;
+			// Si on a pas pu s'autentifier
+			if (response?.msg == "Erreur d'authentification de l'application") {
+				bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Une erreur d'authentification est survenue. Veuillez vous reconnecter via le terminal.")
+				return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
+			}
+
+			// Si il y a une erreur, informer l'utilisateur
+			if (!response?.success) {
+				bot.telegram.sendMessage(freebox.chatId || freebox.userId, `Une erreur est survenue${response?.msg || response?.message || typeof response == 'object' ? ` : ${response.msg || response.message || JSON.stringify(response)}` : "... Signaler ce problème."}`).catch(err => {
+					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
+					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
+				})
+				continue
+			}
+
+			// On récupère le dernier appel
+			response = response?.result?.[0] || null
 
 			// On ignore les appels qui ne sont pas entrants
 			if (response.type == "outgoing") continue
 
-			// On prépare le bouton pour créer un contact
-			var replyMarkup = null;
-			if (number == name && number) {
-				replyMarkup = {
-					inline_keyboard: [
-						[{
-							text: "Créer un contact",
-							callback_data: "createcontact"
-						}]
-					]
-				};
-			}
+			// Si le dernier appel est différent du dernier appel enregistré
+			if (freebox?.lastID != response.id) {
+				// On enregistre l'id de l'appel
+				freebox.lastID = response.id;
 
-			// On envoie le message
-			bot.telegram.sendMessage(id, `Nouvel appel entrant de ${name || "Numéro masqué"}${number != name ? ` \n${number || "Numéro masqué"}` : ''}`, {
-				reply_markup: replyMarkup
-			});
+				// On ignore le reste si on était à la première itération (permet juste de récupérer le dernier appel)
+				if (firstIteration) continue
+
+				// On obtient les infos, et on définit l'ID du dernier appel enregistré
+				var number = response.number;
+				var name = response.name;
+
+				// On met en forme le numéro
+				if (name == number && number.length == 10) {
+					name = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
+					number = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
+				}
+				if (name != number && number.length == 10) {
+					number = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
+				}
+
+				// On enregistre l'id de l'appel
+				freebox.lastID = response.id;
+
+				// On prépare le bouton pour créer un contact
+				var replyMarkup = null;
+				if (number == name && number) {
+					replyMarkup = {
+						inline_keyboard: [
+							[{
+								text: "Créer un contact",
+								callback_data: "createcontact"
+							}]
+						]
+					};
+				}
+
+				// On envoie le message
+				await bot.telegram.sendMessage(freebox.chatId || freebox.userId, `Nouvel appel entrant de ${name || "Numéro masqué"}${number != name ? ` \n${number || "Numéro masqué"}` : ''}`, {
+					reply_markup: replyMarkup
+				}).catch(err => {
+					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
+					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
+				})
+			}
 		}
+
+		// On met à jour la variable
+		firstIteration = false
 	}
 }
 
 // Créer un contact
-async function createContact(name, num) {
+async function createContact(name, num, ctx) {
+	// Obtenir les infos sur l'utilisateur
+	const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
+	const freebox = freeboxs.find(e => e.userId == userId)
+
 	// Créer un contact
-	const response = await freebox.fetch({
+	var response = await freebox?.client?.fetch({
 		method: "POST",
 		url: "v10/contact/",
 		body: JSON.stringify({
@@ -592,7 +674,7 @@ async function createContact(name, num) {
 	const id = response.result.id;
 
 	// Ajouter le numéro au contact
-	const addNumber = await freebox.fetch({
+	const addNumber = await freebox?.client?.fetch({
 		method: "POST",
 		url: "v10/number/",
 		body: JSON.stringify({
@@ -606,9 +688,13 @@ async function createContact(name, num) {
 }
 
 // Obtenir le numéro de téléphone
-async function myNumber() {
+async function myNumber(ctx) {
+	// Obtenir les infos sur l'utilisateur
+	const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
+	const freebox = freeboxs.find(e => e.userId == userId)
+
 	// Requête pour récupérer quelques informations sur le compte
-	const response = await freebox.fetch({
+	var response = await freebox?.client?.fetch({
 		method: "GET",
 		url: "v10/call/account/",
 		parseJson: true
@@ -618,15 +704,19 @@ async function myNumber() {
 
 // Obtenir un contact
 async function getContact(name, ctx) {
+	// Obtenir les infos sur l'utilisateur
+	const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
+	const freebox = freeboxs.find(e => e.userId == userId)
+
 	// On récupère les contacts
-	var response = await freebox.fetch({
+	var response = await freebox?.client?.fetch({
 		method: "GET",
 		url: "v10/contact/",
 		parseJson: true
 	});
 
 	// Si on a une erreur
-	if (!response.success) return ctx.reply("Impossible de récupérer les contacts : " + response.msg || response).catch(err => { })
+	if (!response?.success) return ctx.reply("Impossible de récupérer les contacts : " + response.msg || response).catch(err => { })
 
 	// Si l'entrée de l'utilisateur correspond au firstname ou lastname d'un contact
 	var contacts = response?.result || []
@@ -637,14 +727,14 @@ async function getContact(name, ctx) {
 	if (!contact) return ctx.reply("Aucun contact n'a pu être trouvé.").catch(err => { })
 
 	// On récupère les numéros du contact
-	var response = await freebox.fetch({
+	var response = await freebox?.client?.fetch({
 		method: "GET",
 		url: `v10/contact/${contact.id}/numbers/`,
 		parseJson: true
 	});
 
 	// Si on a une erreur
-	if (!response.success) return ctx.reply("Impossible de récupérer le numéro du contact : " + response.msg || response).catch(err => { })
+	if (!response?.success) return ctx.reply("Impossible de récupérer le numéro du contact : " + response.msg || response).catch(err => { })
 
 	// Si on a pas de numéros
 	var numbers = response?.result || []
@@ -671,15 +761,19 @@ async function getContact(name, ctx) {
 
 // Supprimer un contact
 async function deleteContact(name, ctx) {
+	// Obtenir les infos sur l'utilisateur
+	const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
+	const freebox = freeboxs.find(e => e.userId == userId)
+
 	// On récupère les contacts
-	var response = await freebox.fetch({
+	var response = await freebox?.client?.fetch({
 		method: "GET",
 		url: "v10/contact/",
 		parseJson: true
 	});
 
 	// Si on a une erreur
-	if (!response.success) return ctx.reply("Impossible de récupérer les contacts : ", response.msg || response).catch(err => { })
+	if (!response?.success) return ctx.reply("Impossible de récupérer les contacts : ", response.msg || response).catch(err => { })
 
 	// Si l'entrée de l'utilisateur correspond au firstname ou lastname d'un contact
 	var contacts = response?.result || []
@@ -690,31 +784,34 @@ async function deleteContact(name, ctx) {
 	if (!contact) return ctx.reply("Aucun contact n'a pu être trouvé.").catch(err => { })
 
 	// On supprime le contact
-	var response = await freebox.fetch({
+	var response = await freebox?.client?.fetch({
 		method: "DELETE",
 		url: `v10/contact/${contact.id}/`,
 		parseJson: true
 	});
 
 	// Si on a une erreur
-	if (!response.success) return ctx.reply("Impossible de supprimer le contact : ", response.msg || response).catch(err => { })
+	if (!response?.success) return ctx.reply("Impossible de supprimer le contact : ", response.msg || response).catch(err => { })
 
 	// On informe l'utilisateur que le contact a bien été supprimé
 	ctx.reply("Le contact a bien été supprimé.").catch(err => { })
 }
 
 // Envoyer le dernier message vocal dans le répondeur
-async function sendVoicemail(voiceId, number) {
+async function sendVoicemail(userId, voiceId, number) {
+	// Obtenir les infos sur l'utilisateur
+	const freebox = freeboxs.find(e => e.userId == userId)
+
 	// Obtenir les messages vocaux
 	if (!voiceId) {
-		var response = await freebox.fetch({
+		var response = await freebox?.client?.fetch({
 			method: "GET",
 			url: "v10/call/voicemail/",
 			parseJson: true
 		});
 
 		// Si on a une erreur
-		if (!response.success) return bot.telegram.sendMessage(id, "Impossible de récupérer les derniers appels : ", response.msg || response).catch(err => { })
+		if (!response?.success) return bot.telegram.sendMessage(id, "Impossible de récupérer les derniers appels : ", response?.msg || response).catch(err => { })
 
 		// On trie pour avoir le plus récent
 		response = response?.result || []
@@ -729,7 +826,7 @@ async function sendVoicemail(voiceId, number) {
 	}
 
 	// On récupère les contacts
-	var response = await freebox.fetch({
+	var response = await freebox?.client?.fetch({
 		method: "GET",
 		url: "v10/contact/",
 		parseJson: true
@@ -741,7 +838,7 @@ async function sendVoicemail(voiceId, number) {
 	if (number.length == 10) number = number.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5")
 
 	// On télécharge le message vocal
-	var responseAudio = await freebox.fetch({
+	var responseAudio = await freebox?.client?.fetch({
 		method: "GET",
 		url: `v10/call/voicemail/${voiceId}/audio_file/`
 	})
