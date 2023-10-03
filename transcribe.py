@@ -1,5 +1,7 @@
 import whisper
+import sys
 
+audio = sys.argv[1] 
 """
 Vous avez le choix entre plusieurs modèles.
 tiny : ~ 1GB VRAM
@@ -10,6 +12,6 @@ large : ~ 10GB VRAM (meilleur modèle, mais plus lent et plus gourmand en mémoi
 """
 model = whisper.load_model("small")
 whisper.warnings.filterwarnings("ignore") # Ignorer les warnings
-result = model.transcribe("audio.mp3")
+result = model.transcribe(audio)
 
 print(result["text"])
