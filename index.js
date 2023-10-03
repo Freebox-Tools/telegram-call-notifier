@@ -138,12 +138,16 @@ Pour associer une Freebox à votre compte Telegram, vous devrez utiliser l'assis
 3. Dans ce terminal, entrez la commande suivante : <code>npx freebox-notifier-cli</code>
 4. Suivez les instructions affichées dans le terminal.
 
-En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay</a>.`
+En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay</a>.
+<i>Non-affilié à Free et Iliad.</i>`
 			, { disable_web_page_preview: true, allow_sending_without_reply: true }).catch(err => { })
 	})
 
 	// Commande logout
 	bot.command('logout', async (ctx) => {
+		// On vérifie que l'utilisateur est bien connecté
+		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+
 		// Créer un identifiant unique pour les boutons
 		var id = Date.now();
 
@@ -189,11 +193,15 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 	// Commande voicemail
 	bot.command('voicemail', async (ctx) => {
+		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 		await sendVoicemail(ctx.from.id)
 	})
 
 	// Commande contact
 	bot.command('contact', async (ctx) => {
+		// On vérifie que l'utilisateur est bien connecté
+		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+
 		// Si on a un argument, on envoie directement le contact
 		if (ctx.message.text.split(" ").length > 1) {
 			var name = ctx.message.text.split(" ")[1]
@@ -215,6 +223,9 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 	// Commande createcontact
 	bot.command('createcontact', (ctx) => {
+		// On vérifie que l'utilisateur est bien connecté
+		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+
 		// Demander à l'utilisateur d'envoyer un message
 		ctx.reply("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : Jean, 0123456789").catch(err => { })
 
@@ -230,6 +241,9 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 	// Commande deletecontact
 	bot.command('deletecontact', async (ctx) => {
+		// On vérifie que l'utilisateur est bien connecté
+		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+
 		// Si après deletecontact il y a un nom, on execute la fonction deleteContact
 		if (ctx.message.text.split(" ").length > 1) {
 			var name = ctx.message.text.split(" ")[1]
@@ -251,6 +265,9 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 	// Commande mynumber
 	bot.command('mynumber', async (ctx) => {
+		// On vérifie que l'utilisateur est bien connecté
+		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+
 		ctx.reply("Votre numéro de téléphone fixe est le : " + await myNumber(ctx)).catch(err => { })
 	})
 
