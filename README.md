@@ -9,10 +9,11 @@ Call Notifier vous informe avant même que votre téléphone ne sonne ! Il indiq
 <a href="https://t.me/freebox_call_notifier_bot"> <img src="on-telegram.png"> </a>
 
 
-## Fonctionnalité
+## Fonctionnalités
 
 - Notification instantanée lors d'un appel entrant.
 - Envoie un message vocal lorsque votre correspondant laisse un message sur votre répondeur.
+- Obtenir une retranscription du message laissé sur votre répondeur.
 - Afficher votre numéro de téléphone fixe.
 - Ajouter un contact dans votre répertoire.
 - Afficher le numéro de téléphone d'un de vos contacts.
