@@ -7,6 +7,7 @@ var bot = new Telegraf(process.env.BOT_TOKEN)
 var id = process.env.TELEGRAM_ID
 var ffmpeg = require('ffmpeg');
 const { exec } = require("child_process");
+const fetch = require('node-fetch');
 
 // Supabase
 var { createClient } = require("@supabase/supabase-js");
@@ -38,14 +39,14 @@ async function getSupabaseUsers() {
 
 		// On s'authentifie
 		var response = await freebox.authentificate()
-		if (!response?.success){
+		if (!response?.success) {
 			// On prévient l'utilisateur
 			bot.telegram.sendMessage(user.userId, "Nous n'avons pas pu vous connecter à votre Freebox. Nous réessayerons plus tard. Si le problème persiste, veuillez vous déconnecter et vous reconnecter.").catch(err => {
 				console.log(`Impossible de contacter l'utilisateur ${user.userId} : `, err)
 				return disconnectBox(user.userId, user.id)
 			})
 		}
-		else console.log(`Connecté à la Freebox ${getFreeboxName(user.boxModel)} pour l'utilisateur ${user.userId}.`)
+		else console.log(`(nouvel utilisateur) Connecté à la Freebox ${getFreeboxName(user.boxModel)} pour l'utilisateur ${user.userId}.`)
 
 		// On ajoute la Freebox à la liste
 		freeboxs.push({
@@ -70,8 +71,6 @@ setInterval(() => getSupabaseUsers(), 1000 * 60 * 5)
 // Liste des boxs connectées
 var freeboxs = []
 
-// TODO: on met une erreur qd le gars utilise une cmd alors qu'il est pas co
-
 // TODO: on précisera dans Le README qu'il faut pas leak la SUPABASE_PUBLIC_KEY mm si le nom indique qu'elle est publique, c'est pas vrm le cas
 // TODO: on précisera aussi dans le README d'activer les RLS (voir celle déjà définit dans la base de données)
 
@@ -82,19 +81,20 @@ var waitingForReplies = []
 
 // Liste des noms des Freebox
 function getFreeboxName(name) {
-	if (name.includes("Freebox Server Mini")) return "Freebox Mini 4K"
-	if (name.includes("Freebox Delta")) return "Freebox Delta"
-	if (name.includes("Freebox Pop")) return "Freebox Pop"
-	if (name.includes("Freebox Révolution") || name.includes("Freebox Revolution")) return "Freebox Révolution"
-	if (name.includes("Freebox Server")) return "Freebox Server"
-	return "Freebox"
+	console.log(name)
+	if (name.includes("Server Mini")) return "Mini 4K"
+	if (name.includes("Delta") || name.includes("v7")) return "Delta"
+	if (name.includes("Pop")) return "Pop"
+	if (name.includes("Révolution") || name.includes("Revolution")) return "Révolution"
+	if (name.includes("Server")) return "Server"
+	return "Inconnue"
 }
 
 // Fonction pour déconnecter la box d'un utilisateur
 async function disconnectBox(userId, boxId) {
 	// On supprime les infos de l'utilisateur
 	var { error } = await supabase.from("users").delete().match({ userId: userId })
-	if (error){
+	if (error) {
 		var { error } = await supabase.from("users").delete().match({ id: boxId })
 		if (error) return false
 	}
@@ -116,7 +116,11 @@ exec("ffmpeg -version", (error) => {
 // Fonction principale
 async function main() {
 	// Connecter le bot
+	bot.botInfo = await bot.telegram.getMe();
+	console.log("Bot démarré en tant que @" + bot?.botInfo?.username || bot?.botInfo || bot);
 	bot.launch()
+
+	// Obtenir les utilisateurs Supabase
 	await getSupabaseUsers()
 
 	// Lancer le bot
@@ -146,7 +150,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 	// Commande logout
 	bot.command('logout', async (ctx) => {
 		// On vérifie que l'utilisateur est bien connecté
-		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
 		// Créer un identifiant unique pour les boutons
 		var id = Date.now();
@@ -193,14 +197,14 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 	// Commande voicemail
 	bot.command('voicemail', async (ctx) => {
-		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 		await sendVoicemail(ctx.from.id)
 	})
 
 	// Commande contact
 	bot.command('contact', async (ctx) => {
 		// On vérifie que l'utilisateur est bien connecté
-		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
 		// Si on a un argument, on envoie directement le contact
 		if (ctx.message.text.split(" ").length > 1) {
@@ -224,7 +228,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 	// Commande createcontact
 	bot.command('createcontact', (ctx) => {
 		// On vérifie que l'utilisateur est bien connecté
-		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
 		// Demander à l'utilisateur d'envoyer un message
 		ctx.reply("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : Jean, 0123456789").catch(err => { })
@@ -242,7 +246,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 	// Commande deletecontact
 	bot.command('deletecontact', async (ctx) => {
 		// On vérifie que l'utilisateur est bien connecté
-		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
 		// Si après deletecontact il y a un nom, on execute la fonction deleteContact
 		if (ctx.message.text.split(" ").length > 1) {
@@ -266,7 +270,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 	// Commande mynumber
 	bot.command('mynumber', async (ctx) => {
 		// On vérifie que l'utilisateur est bien connecté
-		if(!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
 		ctx.reply("Votre numéro de téléphone fixe est le : " + await myNumber(ctx)).catch(err => { })
 	})
@@ -326,6 +330,97 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 		// Répondre en disant qu'il a bien été supprimé
 		ctx.answerCbQuery(`Le message vocal a bien été supprimé. Il vous reste ${count - 1} message${count - 1 > 1 ? "s" : ""} vocal${count - 1 > 1 ? "s" : ""}.`).catch(err => { })
 	})
+
+	// Action du bouton "transcribe-voicemail"
+	bot.action('transcribe-voicemail', async (ctx) => {
+		var message = await ctx.reply("Vérification : Veuillez patienter").catch(err => { })
+		// Récupérer l'id du message
+		var messageId = message.message_id
+
+		// Vérifier si python est installé
+		const command = process.platform === 'win32' ? 'python' : 'python3';
+		exec(`${command} --version`, (error, stdout, stderr) => {
+			if (error) {
+				// Modifier le message
+				return ctx.editMessageText({
+					chat_id: id,
+					message_id: messageId,
+					text: "Une erreur s'est produite lors de la vérification de la version de Python."
+				})
+			}
+			if (!stdout.includes('Python 3')) {
+				return ctx.editMessageText({
+					chat_id: id,
+					message_id: messageId,
+					text: "Python 3 n'est pas installé sur votre système."
+				})
+			}
+		});
+		// Récupérer l'id du vocal
+
+		// Récupérer le chemin du fichier vocal
+		const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/getFile?file_id=${ctx.callbackQuery.message.audio.file_id}`);
+		const data = await response.json();
+		const filePath = data.result.file_path;
+
+
+		// Récupérer le fichier vocal grâce a fetch
+		const fileResponse = await fetch(`https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${filePath}`);
+		const fileData = await fileResponse.buffer();
+
+		// Ecrire les données du fichier
+		fs.writeFileSync(`${messageId}.ogg`, fileData)
+
+		// Executer le script python
+		exec(`${command} transcribe.py ${messageId}.ogg`, (error, stdout, stderr) => {
+			// Ajouter le bouton annuler
+			replyMarkup = {
+				inline_keyboard: [
+					[
+						{
+							text: "Annuler",
+							callback_data: `cancel-${messageId}`
+						}
+					]
+				]
+			};
+			ctx.editMessageText({
+				chat_id: id,
+				message_id: messageId,
+				text: "Transcription en cours...",
+			})
+
+			// Action du bouton annuler
+			bot.action(`cancel-${messageId}`, async (ctx) => {
+				// Supprimer le message
+				ctx.deleteMessage().catch(err => { })
+				// Supprimer le bouton annuler
+				replyMarkup = null
+				//Arrêter le script python
+				process.kill()
+				// Dire que ça a bien été annulé
+				ctx.answerCbQuery("La transcription a bien été annulée.").catch(err => { })
+				// Supprimer le fichier
+				fs.unlinkSync(`${messageId}.ogg`)
+				return
+			})
+			// Ajouter un bouton pour annuler
+			if (error) return ctx.editMessageText("Une erreur s'est produite lors de l'exécution du script Python.", error).catch(err => { });
+			if (stderr) return ctx.editMessageText("Une erreur s'est produite lors de l'exécution du script Python.", stderr).catch(err => { });
+			// On envoie la transcription
+			console.log(stdout)
+			ctx.editMessageText({
+				chat_id: id,
+				message_id: messageId,
+				text: `${stdout}`,
+			})
+
+			// Supprimer le bouton annuler
+			replyMarkup = null
+			// Supprimer le fichier
+			fs.unlinkSync(`${messageId}.ogg`)
+		});
+	});
 
 	// Action du bouton "Supprimer le contact"
 	bot.action('deletecontact', async (ctx) => {
@@ -479,7 +574,7 @@ async function logVoices() {
 	while (true) {
 		// Pour chaque box
 		for (const freebox of freeboxs) {
-			console.log("ok")
+			// console.log("ok") Marre que le bot se prenne pour Naps
 
 			// Obtenir les derniers appels
 			var response = await freebox?.client?.fetch({
@@ -490,7 +585,7 @@ async function logVoices() {
 			if (response?.result?.length) response = response.result.sort((a, b) => b.date - a.date)
 
 			// Enregistrer dans des variables si c'est la première itération
-			if(firstIteration){
+			if (firstIteration || !freebox.voicemail) {
 				freebox.voicemail = {}
 				freebox.voicemail.length = response?.length || 0
 				freebox.voicemail.msgId = response?.[0]?.id || null
@@ -558,8 +653,8 @@ async function logVoices() {
 		// On met à jour la variable
 		firstIteration = false
 
-		// On attend 5 secondes avant de retenter d'obtenir les vocs (on évite de spam inutilement)
-		await new Promise(r => setTimeout(r, 5000));
+		// On attend 3 secondes avant de retenter d'obtenir les vocs (on évite de spam inutilement)
+		await new Promise(r => setTimeout(r, 3000));
 	}
 }
 
@@ -573,8 +668,8 @@ async function logCalls() {
 		// Pour chaque box
 		for (const freebox of freeboxs) {
 			// On définit des variables de base
-			if(!freebox.injoinable) freebox.injoinable = false
-			if(!freebox.lastID) freebox.lastID = null
+			if (!freebox.injoinable) freebox.injoinable = false
+			if (!freebox.lastID) freebox.lastID = null
 
 			// Obtenir les derniers appels
 			var response = await freebox?.client?.fetch({
@@ -584,9 +679,8 @@ async function logCalls() {
 			})
 
 			// Si la box est vrm injoinable
-			// TODO: faut tester ça en éteignant vrm sa box, j'ai juste testé de deco mon wifi ptdrr
-			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`){
-				if(!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
+			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`) {
+				if (!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
 					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
 				})
@@ -594,7 +688,7 @@ async function logCalls() {
 				continue
 			} else {
 				// Si on était injoinable
-				if(freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox semble de nouveau connecté à Internet !").catch(err => { })
+				if (freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox semble de nouveau connecté à Internet !").catch(err => { })
 				freebox.injoinable = false // on est joinable
 			}
 
@@ -622,10 +716,11 @@ async function logCalls() {
 			// Si le dernier appel est différent du dernier appel enregistré
 			if (freebox?.lastID != response.id) {
 				// On enregistre l'id de l'appel
+				var ifLastIdAlreadyExists = freebox.lastID ? true : false
 				freebox.lastID = response.id;
 
 				// On ignore le reste si on était à la première itération (permet juste de récupérer le dernier appel)
-				if (firstIteration) continue
+				if (firstIteration || !ifLastIdAlreadyExists) continue
 
 				// On obtient les infos, et on définit l'ID du dernier appel enregistré
 				var number = response.number;
@@ -668,6 +763,9 @@ async function logCalls() {
 
 		// On met à jour la variable
 		firstIteration = false
+
+		// On attend vite fait
+		await new Promise(r => setTimeout(r, 500)) // 500ms
 	}
 }
 
@@ -883,6 +981,10 @@ async function sendVoicemail(userId, voiceId, number) {
 					[{
 						text: "Supprimer le dernier message du répondeur",
 						callback_data: `delete-voicemail`
+					}],
+					[{
+						text: "Transcrire",
+						callback_data: `transcribe-voicemail`
 					}]
 				]
 			}
