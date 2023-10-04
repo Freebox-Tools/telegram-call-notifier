@@ -585,7 +585,7 @@ async function logVoices() {
 			if (response?.result?.length) response = response.result.sort((a, b) => b.date - a.date)
 
 			// Enregistrer dans des variables si c'est la première itération
-			if (firstIteration || !freebox.voicemail) {
+			if(firstIteration){
 				freebox.voicemail = {}
 				freebox.voicemail.length = response?.length || 0
 				freebox.voicemail.msgId = response?.[0]?.id || null
@@ -679,8 +679,9 @@ async function logCalls() {
 			})
 
 			// Si la box est vrm injoinable
-			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`) {
-				if (!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
+			// TODO: faut tester ça en éteignant vrm sa box, j'ai juste testé de deco mon wifi ptdrr
+			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`){
+				if(!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
 					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
 				})
