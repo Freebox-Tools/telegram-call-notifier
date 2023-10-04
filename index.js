@@ -356,7 +356,6 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 				})
 			}
 		});
-		// Récupérer l'id du vocal
 
 		// Récupérer le chemin du fichier vocal
 		const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/getFile?file_id=${ctx.callbackQuery.message.audio.file_id}`);
