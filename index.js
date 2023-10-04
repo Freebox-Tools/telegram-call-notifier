@@ -45,7 +45,7 @@ async function getSupabaseUsers() {
 				return disconnectBox(user.userId, user.id)
 			})
 		}
-		else console.log(`Connecté à la Freebox ${getFreeboxName(user.boxModel)} pour l'utilisateur ${user.userId}.`)
+		else console.log(`(nouvel utilisateur) Connecté à la Freebox ${getFreeboxName(user.boxModel)} pour l'utilisateur ${user.userId}.`)
 
 		// On ajoute la Freebox à la liste
 		freeboxs.push({
@@ -69,8 +69,6 @@ setInterval(() => getSupabaseUsers(), 1000 * 60 * 5)
 
 // Liste des boxs connectées
 var freeboxs = []
-
-// TODO: on met une erreur qd le gars utilise une cmd alors qu'il est pas co
 
 // TODO: on précisera dans Le README qu'il faut pas leak la SUPABASE_PUBLIC_KEY mm si le nom indique qu'elle est publique, c'est pas vrm le cas
 // TODO: on précisera aussi dans le README d'activer les RLS (voir celle déjà définit dans la base de données)
@@ -116,7 +114,11 @@ exec("ffmpeg -version", (error) => {
 // Fonction principale
 async function main() {
 	// Connecter le bot
+	bot.botInfo = await bot.telegram.getMe();
+	console.log("Bot démarré en tant que @" + bot?.botInfo?.username || bot?.botInfo || bot);
 	bot.launch()
+
+	// Obtenir les utilisateurs Supabase
 	await getSupabaseUsers()
 
 	// Lancer le bot
@@ -490,7 +492,7 @@ async function logVoices() {
 			if (response?.result?.length) response = response.result.sort((a, b) => b.date - a.date)
 
 			// Enregistrer dans des variables si c'est la première itération
-			if(firstIteration){
+			if(firstIteration || !freebox.voicemail){
 				freebox.voicemail = {}
 				freebox.voicemail.length = response?.length || 0
 				freebox.voicemail.msgId = response?.[0]?.id || null
@@ -584,7 +586,6 @@ async function logCalls() {
 			})
 
 			// Si la box est vrm injoinable
-			// TODO: faut tester ça en éteignant vrm sa box, j'ai juste testé de deco mon wifi ptdrr
 			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`){
 				if(!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
@@ -622,10 +623,11 @@ async function logCalls() {
 			// Si le dernier appel est différent du dernier appel enregistré
 			if (freebox?.lastID != response.id) {
 				// On enregistre l'id de l'appel
+				var ifLastIdAlreadyExists = freebox.lastID ? true : false
 				freebox.lastID = response.id;
 
 				// On ignore le reste si on était à la première itération (permet juste de récupérer le dernier appel)
-				if (firstIteration) continue
+				if (firstIteration || !ifLastIdAlreadyExists) continue
 
 				// On obtient les infos, et on définit l'ID du dernier appel enregistré
 				var number = response.number;
@@ -668,6 +670,9 @@ async function logCalls() {
 
 		// On met à jour la variable
 		firstIteration = false
+
+		// On attend vite fait
+		await new Promise(r => setTimeout(r, 500)) // 500ms
 	}
 }
 
