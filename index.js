@@ -84,8 +84,8 @@ function getFreeboxName(name) {
 	console.log(name)
 	if (name.includes("Server Mini")) return "Mini 4K"
 	if (name.includes("Delta") || name.includes("v7")) return "Delta"
-	if (name.includes("Pop")) return "Pop"
-	if (name.includes("Révolution") || name.includes("Revolution")) return "Révolution"
+	if (name.includes("Pop") || name.includes("v8")) return "Pop"
+	if (name.includes("Révolution") || name.includes("Revolution") || name.includes("v6")) return "Révolution"
 	if (name.includes("Server")) return "Server"
 	return "Inconnue"
 }
@@ -573,8 +573,6 @@ async function logVoices() {
 	while (true) {
 		// Pour chaque box
 		for (const freebox of freeboxs) {
-			// console.log("ok") Marre que le bot se prenne pour Naps
-
 			// Obtenir les derniers appels
 			var response = await freebox?.client?.fetch({
 				method: "GET",
@@ -584,7 +582,7 @@ async function logVoices() {
 			if (response?.result?.length) response = response.result.sort((a, b) => b.date - a.date)
 
 			// Enregistrer dans des variables si c'est la première itération
-			if(firstIteration){
+			if(firstIteration || !freebox?.voicemail){
 				freebox.voicemail = {}
 				freebox.voicemail.length = response?.length || 0
 				freebox.voicemail.msgId = response?.[0]?.id || null
@@ -678,7 +676,6 @@ async function logCalls() {
 			})
 
 			// Si la box est vrm injoinable
-			// TODO: faut tester ça en éteignant vrm sa box, j'ai juste testé de deco mon wifi ptdrr
 			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`){
 				if(!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
