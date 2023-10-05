@@ -650,8 +650,9 @@ async function logVoices() {
 		// On met à jour la variable
 		firstIteration = false
 
-		// On attend 3 secondes avant de retenter d'obtenir les vocs (on évite de spam inutilement)
-		await new Promise(r => setTimeout(r, 3000));
+		// On attend 10 secondes avant de retenter d'obtenir les vocs
+		// Nécessaire, - de 10 secondes fait que ça fonctionne pas et sah j'ai la flm d'expliquer pourquoi
+		await new Promise(r => setTimeout(r, 10000));
 	}
 }
 
