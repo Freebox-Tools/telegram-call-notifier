@@ -4,7 +4,7 @@ const fs = require('fs');
 require('dotenv').config();
 const { Telegraf } = require('telegraf')
 var bot = new Telegraf(process.env.BOT_TOKEN)
-var id = process.env.TELEGRAM_ID
+var id = process.env.TELEGRAM_ID //TODO: ne plus utiliser ça
 var ffmpeg = require('ffmpeg');
 const { exec } = require("child_process");
 const fetch = require('node-fetch');
@@ -635,7 +635,7 @@ async function logVoices() {
 					await sendVoicemail(freebox.userId || freebox.chatId, freebox.voicemail.msgId, response?.[0]?.phone_number || null)
 
 					// On enregistre que le message vocal a été envoyé
-					var { error } = await supabase.from("users").update({ lastVoicemailId: freebox.voicemail.msgId }).match({ userId: id })
+					var { error } = await supabase.from("users").update({ lastVoicemailId: freebox.voicemail.msgId }).match({ userId: freebox.userId || freebox.chatId })
 					if (error) console.log(error)
 
 					continue
@@ -923,14 +923,14 @@ async function sendVoicemail(userId, voiceId, number) {
 		});
 
 		// Si on a une erreur
-		if (!response?.success) return bot.telegram.sendMessage(id, "Impossible de récupérer les derniers appels : ", response?.msg || response).catch(err => { })
+		if (!response?.success) return bot.telegram.sendMessage(userId, "Impossible de récupérer les derniers appels : ", response?.msg || response).catch(err => { })
 
 		// On trie pour avoir le plus récent
 		response = response?.result || []
 		response = response.sort((a, b) => b.date - a.date)
 
 		// Si on a rien
-		if (!response.length) return bot.telegram.sendMessage(id, "Vous n'avez aucun message vocal.").catch(err => { })
+		if (!response.length) return bot.telegram.sendMessage(userId, "Vous n'avez aucun message vocal.").catch(err => { })
 
 		// On récupère le dernier
 		voiceId = response?.[0]?.id || null
@@ -989,7 +989,7 @@ async function sendVoicemail(userId, voiceId, number) {
 			// Si on a pas d'erreur, envoie le mp3
 			if (!error) {
 				// Envoyer le message vocal grâce à bot.telegram
-				await bot.telegram.sendAudio(id, { source: `${randomid}_audio.mp3` }, {
+				await bot.telegram.sendAudio(userId, { source: `${randomid}_audio.mp3` }, {
 					reply_markup: replyMarkup, // Ajouter le bouton au message
 					title: "Message vocal",
 					performer: number
@@ -1004,7 +1004,7 @@ async function sendVoicemail(userId, voiceId, number) {
 				} catch (err) { }
 			} else {
 				// On envoie le fichier wav d'origine
-				await bot.telegram.sendAudio(id, { source: file }, {
+				await bot.telegram.sendAudio(userId, { source: file }, {
 					reply_markup: replyMarkup, // Ajouter le bouton au message
 					title: "Message vocal",
 					performer: number
@@ -1021,6 +1021,6 @@ async function sendVoicemail(userId, voiceId, number) {
 		});
 	} catch (err) {
 		console.log(err)
-		bot.telegram.sendMessage(id, "Impossible de récupérer le message vocal : " + err.msg || err.message || err.code || err).catch(err => { })
+		bot.telegram.sendMessage(userId, "Impossible de récupérer le message vocal : " + err.msg || err.message || err.code || err).catch(err => { })
 	}
 }
