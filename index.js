@@ -14,6 +14,7 @@ var { createClient } = require("@supabase/supabase-js");
 var supabase = createClient(process.env.SUPABASE_LINK, process.env.SUPABASE_PUBLIC_KEY)
 
 // Obtenir tout les utilisateurs
+var freeboxs = []
 var users = []
 async function getSupabaseUsers() {
 	// On obtient les utilisateurs
@@ -92,6 +93,9 @@ function getFreeboxName(name) {
 
 // Fonction pour déconnecter la box d'un utilisateur
 async function disconnectBox(userId, boxId) {
+	// Log
+	console.log(`Déconnexion de la box ${boxId} pour l'utilisateur ${userId}.`)
+
 	// On supprime les infos de l'utilisateur
 	var { error } = await supabase.from("users").delete().match({ userId: userId })
 	if (error) {
@@ -199,6 +203,12 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 	bot.command('voicemail', async (ctx) => {
 		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 		await sendVoicemail(ctx.from.id)
+	})
+
+	// Commande wps
+	bot.command('wps', async (ctx) => {
+		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+		await enableWps(ctx)
 	})
 
 	// Commande contact
@@ -371,7 +381,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 		fs.writeFileSync(`${messageId}.ogg`, fileData)
 
 		// Executer le script python
-		exec(`${command} transcribe.py ${messageId}.ogg`, (error, stdout, stderr) => {
+		exec(`${command} transcribe/main.py ${messageId}.ogg`, (error, stdout, stderr) => {
 			// Ajouter le bouton annuler
 			replyMarkup = {
 				inline_keyboard: [
@@ -582,7 +592,7 @@ async function logVoices() {
 			if (response?.result?.length) response = response.result.sort((a, b) => b.date - a.date)
 
 			// Enregistrer dans des variables si c'est la première itération
-			if(firstIteration || !freebox?.voicemail){
+			if (firstIteration || !freebox?.voicemail) {
 				freebox.voicemail = {}
 				freebox.voicemail.length = response?.length || 0
 				freebox.voicemail.msgId = response?.[0]?.id || null
@@ -677,8 +687,8 @@ async function logCalls() {
 			})
 
 			// Si la box est vrm injoinable
-			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`){
-				if(!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
+			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`) {
+				if (!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
 					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
 				})
@@ -692,7 +702,7 @@ async function logCalls() {
 
 			// Si on a pas pu s'autentifier
 			if (response?.msg == "Erreur d'authentification de l'application") {
-				bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Une erreur d'authentification est survenue. Veuillez vous reconnecter via le terminal.")
+				bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Une erreur d'authentification est survenue. Veuillez vous reconnecter via le terminal.").catch(err => {})
 				return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
 			}
 
@@ -765,6 +775,81 @@ async function logCalls() {
 		// On attend vite fait
 		await new Promise(r => setTimeout(r, 500)) // 500ms
 	}
+}
+
+// Activer le WPS
+async function enableWps(ctx) {
+	// Obtenir qlq infos
+	var selected
+	var now = Date.now()
+	const freebox = freeboxs.find(e => e.userId == ctx.message.from.id)
+
+	// Obtenir les cartes réseaux et leurs ids
+	var response = await freebox?.client?.fetch({
+		method: "GET",
+		url: "v9/wifi/bss",
+		parseJson: true
+	});
+	response.result = response.result.filter(e => e.config.enabled && e.config.wps_enabled) // on filtre pour n'avoir que les réseaux sur lesquels le WPS est activé
+
+	// On récupère les infos sur les cartes
+	var bands = response?.result.map(e => {
+		return { band: e?.status?.band, id: e?.id, ssid: e?.config?.ssid }
+	})
+	if (!bands.length) return ctx.reply("Le WPS n'est activé sur aucun des réseaux. Vous pouvez vous rendre sur Freebox OS pour l'activer sur un de vos réseaux").catch(err => { })
+
+	// S'il y a qu'un réseau sur lequel le WPS est activé, on le sélectionne directement
+	if (bands.length == 1) selected = bands[0]
+
+	// Sinon, on demande à l'utilisateur
+	else if (bands.length > 1) {
+		// Ajouter un bouton pour chaque réseau
+		var replyMarkup = {
+			inline_keyboard: [
+				bands.map(b => {
+					return {
+						text: `${b.band == "5G" ? "5GHz" : b.band == "2G4" ? "2.4GHz" : b.band} - ${b.ssid}`.trim(),
+						callback_data: `wps-${now}-${b.id}`,
+					}
+				})
+			]
+		}
+
+		// Envoyer le message
+		await ctx.reply("Sur quel réseau voulez-vous activer le WPS ?", { reply_markup: replyMarkup }).catch(err => { })
+
+		// Détecter la réponse de l'utilisateur
+		bot.action(bands.map(b => `wps-${now}-${b.id}`), async (ctx) => {
+			// Obtenir l'id du bouton
+			var id = ctx.callbackQuery.data.split("-")
+			if(id?.[1] != now) return
+
+			// Obtenir les infos sur le réseau
+			selected = bands.find(e => e.id == id?.[2])
+			if (!selected) return ctx.answerCbQuery("Une erreur est survenue. Impossible d'enregistrer les infos.").catch(err => { })
+
+			// Supprimer le message
+			ctx.deleteMessage().catch(err => { })
+			enableWpsRequest(ctx, freebox, selected)
+		})
+	}
+}
+
+// Faire la requête qui active le WPS
+async function enableWpsRequest(ctx, freebox, selected) {
+	// On fait la requête
+	var response = await freebox?.client?.fetch({
+		method: "POST",
+		url: `/v9/wifi/wps/start/`,
+		body: JSON.stringify({
+			"bssid": selected?.id
+		}),
+		parseJson: true
+	});
+
+	// Si il y a une erreur, on répond avec
+	if (!response?.success) await ctx.reply(response.error_code == 'busy' ? "Une association est déjà en cours, patienter quelques minutes avant de réessayer." : (response?.msg || response?.message || response || "Impossible d'activer le WPS sur ce réseau.")).catch(err => { })
+	else await ctx.reply(`Le WPS a bien été activé sur "${selected?.ssid || "le réseau"}".`).catch(err => { })
 }
 
 // Créer un contact
