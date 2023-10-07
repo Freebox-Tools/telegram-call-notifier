@@ -80,6 +80,18 @@ var freeboxs = []
 // Liste des réponses d'utilisateur qu'on attend
 var waitingForReplies = []
 
+// Fonction pour échapper les caractères spéciaux et envoyer un msg via html
+function escapeHtml(text){
+	// Si y'a pas de texte, le retourner directement
+	if(!text) return text
+
+	// Si c'est pas un string, le retourner directement
+	if(typeof text != 'string') return text
+
+	// Retourner en remplaçant les caractères spéciaux
+	return text?.replace(/&/g, '&amp;')?.replace(/</g, '&lt;')?.replace(/>/g, '&gt;')?.replace(/"/g, '&quot;')?.replace(/'/g, '&#039;')
+}
+
 // Liste des noms des Freebox
 function getFreeboxName(name) {
 	console.log(name)
@@ -382,6 +394,20 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 		// Executer le script python
 		exec(`${command} transcribe/main.py ${messageId}.ogg`, (error, stdout, stderr) => {
+			// Si on a une erreur
+			if(error || stderr) {
+				// Supprimer le fichier
+				// try { fs.unlinkSync(`${messageId}.ogg`) } catch(err) { }
+
+				// Modifier le message
+				return ctx.editMessageText({
+					parse_mode: "html",
+					chat_id: id,
+					message_id: messageId,
+					text: "Une erreur s'est produite lors de la transcription du message vocal. Vous pouvez signaler cette erreur :\n<pre>\n" + (escapeHtml(stderr || error || "Aucune erreur trouvée.")) + "\n</pre>"
+				})
+			}
+
 			// Ajouter le bouton annuler
 			replyMarkup = {
 				inline_keyboard: [
