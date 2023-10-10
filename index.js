@@ -43,6 +43,7 @@ async function getSupabaseUsers() {
 		if (!response?.success) {
 			// On prévient l'utilisateur
 			bot.telegram.sendMessage(user.userId, "Nous n'avons pas pu vous connecter à votre Freebox. Nous réessayerons plus tard. Si le problème persiste, veuillez vous déconnecter et vous reconnecter.").catch(err => {
+				if (err.code == "ECONNRESET" || err.code == "ECONNREFUSED" || err.code == "ETIMEDOUT" || err.code == "ENOTFOUND" || err.code == "EAI_AGAIN" || err.code == "ECONNABORTED") return
 				console.log(`Impossible de contacter l'utilisateur ${user.userId} : `, err)
 				return disconnectBox(user.userId, user.id)
 			})
@@ -715,6 +716,7 @@ async function logCalls() {
 			// Si la box est vrm injoinable
 			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`) {
 				if (!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
+					if (err.code == "ECONNRESET" || err.code == "ECONNREFUSED" || err.code == "ETIMEDOUT" || err.code == "ENOTFOUND" || err.code == "EAI_AGAIN" || err.code == "ECONNABORTED") return
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
 					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
 				})
@@ -735,6 +737,7 @@ async function logCalls() {
 			// Si il y a une erreur, informer l'utilisateur
 			if (!response?.success) {
 				bot.telegram.sendMessage(freebox.chatId || freebox.userId, `Une erreur est survenue${response?.msg || response?.message || typeof response == 'object' ? ` : ${response.msg || response.message || JSON.stringify(response)}` : "... Signaler ce problème."}`).catch(err => {
+					if (err.code == "ECONNRESET" || err.code == "ECONNREFUSED" || err.code == "ETIMEDOUT" || err.code == "ENOTFOUND" || err.code == "EAI_AGAIN" || err.code == "ECONNABORTED") return
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
 					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
 				})
@@ -789,6 +792,7 @@ async function logCalls() {
 				await bot.telegram.sendMessage(freebox.chatId || freebox.userId, `Nouvel appel entrant de ${name || "Numéro masqué"}${number != name ? ` \n${number || "Numéro masqué"}` : ''}`, {
 					reply_markup: replyMarkup
 				}).catch(err => {
+					if (err.code == "ECONNRESET" || err.code == "ECONNREFUSED" || err.code == "ETIMEDOUT" || err.code == "ENOTFOUND" || err.code == "EAI_AGAIN" || err.code == "ECONNABORTED") return
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
 					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
 				})
