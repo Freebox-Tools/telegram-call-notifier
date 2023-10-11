@@ -82,12 +82,12 @@ var freeboxs = []
 var waitingForReplies = []
 
 // Fonction pour échapper les caractères spéciaux et envoyer un msg via html
-function escapeHtml(text){
+function escapeHtml(text) {
 	// Si y'a pas de texte, le retourner directement
-	if(!text) return text
+	if (!text) return text
 
 	// Si c'est pas un string, le retourner directement
-	if(typeof text != 'string') return text
+	if (typeof text != 'string') return text
 
 	// Retourner en remplaçant les caractères spéciaux
 	return text?.replace(/&/g, '&amp;')?.replace(/</g, '&lt;')?.replace(/>/g, '&gt;')?.replace(/"/g, '&quot;')?.replace(/'/g, '&#039;')
@@ -356,14 +356,30 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 	// Action du bouton "transcribe-voicemail"
 	bot.action('transcribe-voicemail', async (ctx) => {
+		// Action du bouton annuler
 		var message = await ctx.reply("Vérification : Veuillez patienter").catch(err => { })
 		// Récupérer l'id du message
 		var messageId = message.message_id
+
+		// Si ffmpeg n'est pas installé avertir l'utilisateur
+		exec("ffmpeg -version", (error) => {
+			if (error) {
+				console.log(error)
+
+				// Modifier le message
+				return ctx.editMessageText({
+					chat_id: id,
+					message_id: messageId,
+					text: "ffmpeg n'est pas installé sur votre système. Veuillez l'installer."
+				})
+			}
+		});
 
 		// Vérifier si python est installé
 		const command = process.platform === 'win32' ? 'python' : 'python3';
 		exec(`${command} --version`, (error, stdout, stderr) => {
 			if (error) {
+				console.log(error)
 				// Modifier le message
 				return ctx.editMessageText({
 					chat_id: id,
@@ -380,11 +396,58 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 			}
 		});
 
+		// Vérifier si pip est installé
+		exec(`${command} -m pip --version`, (error, stdout, stderr) => {
+			if (error) {
+				console.log(error)
+
+				// Modifier le message
+				return ctx.editMessageText({
+					chat_id: id,
+					message_id: messageId,
+					text: "Une erreur s'est produite lors de la vérification de la version de pip."
+				})
+			}
+			if (!stdout.includes('pip')) {
+				return ctx.editMessageText({
+					chat_id: id,
+					message_id: messageId,
+					text: "Pip n'est pas installé sur votre système."
+				})
+			}
+		});
+
+		// Exécuter la commande pip install -U openai-whisper
+		exec(`pip install -U openai-whisper`, (error) => {
+			if (error) {
+				console.log(error)
+
+				// Modifier le message
+				return ctx.editMessageText({
+					chat_id: id,
+					message_id: messageId,
+					text: "Une erreur s'est produite lors de l'installation du module openai-whisper."
+				})
+			}
+		})
+
+		// Executer la commande pip install setuptools-rust
+		exec(`pip install setuptools-rust`, (error) => {
+			if (error) {
+				console.log(error)
+				// Modifier le message
+				return ctx.editMessageText({
+					chat_id: id,
+					message_id: messageId,
+					text: "Une erreur s'est produite lors de l'installation du module setuptools-rust."
+				})
+			}
+		});
+
 		// Récupérer le chemin du fichier vocal
 		const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/getFile?file_id=${ctx.callbackQuery.message.audio.file_id}`);
 		const data = await response.json();
 		const filePath = data.result.file_path;
-
 
 		// Récupérer le fichier vocal grâce a fetch
 		const fileResponse = await fetch(`https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${filePath}`);
@@ -393,12 +456,40 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 		// Ecrire les données du fichier
 		fs.writeFileSync(`${messageId}.ogg`, fileData)
 
+		// Ajouter le bouton annuler
+		replyMarkup = {
+			inline_keyboard: [
+				[
+					{
+						text: "Annuler",
+						callback_data: `cancel-${messageId}`,
+
+					}
+				]
+			]
+		};
+		ctx.editMessageText({
+			chat_id: id,
+			message_id: messageId,
+			text: "Transcription en cours...",
+			reply_markup: replyMarkup
+		})
 		// Executer le script python
-		exec(`${command} transcribe/main.py ${messageId}.ogg`, (error, stdout, stderr) => {
+		const pythonProcess = exec(`${command} transcribe/main.py ${messageId}.ogg`, { maxBuffer: 1024 * 10000 }, async (error, stdout, stderr) => {
+			// Stocker la sortie standard
 			// Si on a une erreur
-			if(error || stderr) {
+			if (error || stderr) {
+				// Si l'erreur est que transcribe/main.py n'existe pas
+				if (stderr.includes("No such file or directory")) {
+					// Modifier le message
+					return ctx.editMessageText({
+						chat_id: id,
+						message_id: messageId,
+						text: `Le script Python n'a pas été trouvé. Vérifiez que le chemin ${__dirname}/transcribe/main.py existe.`
+					})
+				}
 				// Supprimer le fichier
-				// try { fs.unlinkSync(`${messageId}.ogg`) } catch(err) { }
+				try { fs.unlinkSync(`${messageId}.ogg`) } catch (err) { }
 
 				// Modifier le message
 				return ctx.editMessageText({
@@ -406,57 +497,39 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 					chat_id: id,
 					message_id: messageId,
 					text: "Une erreur s'est produite lors de la transcription du message vocal. Vous pouvez signaler cette erreur :\n<pre>\n" + (escapeHtml(stderr || error || "Aucune erreur trouvée.")) + "\n</pre>"
-				})
+				}).catch(err => { })
 			}
 
-			// Ajouter le bouton annuler
-			replyMarkup = {
-				inline_keyboard: [
-					[
-						{
-							text: "Annuler",
-							callback_data: `cancel-${messageId}`
-						}
-					]
-				]
-			};
-			ctx.editMessageText({
-				chat_id: id,
-				message_id: messageId,
-				text: "Transcription en cours...",
-			})
-
-			// Action du bouton annuler
-			bot.action(`cancel-${messageId}`, async (ctx) => {
-				// Supprimer le message
-				ctx.deleteMessage().catch(err => { })
-				// Supprimer le bouton annuler
-				replyMarkup = null
-				//Arrêter le script python
-				process.kill()
-				// Dire que ça a bien été annulé
-				ctx.answerCbQuery("La transcription a bien été annulée.").catch(err => { })
-				// Supprimer le fichier
-				fs.unlinkSync(`${messageId}.ogg`)
-				return
-			})
-			// Ajouter un bouton pour annuler
 			if (error) return ctx.editMessageText("Une erreur s'est produite lors de l'exécution du script Python.", error).catch(err => { });
 			if (stderr) return ctx.editMessageText("Une erreur s'est produite lors de l'exécution du script Python.", stderr).catch(err => { });
 			// On envoie la transcription
 			console.log(stdout)
+			// Modifier le message
 			ctx.editMessageText({
 				chat_id: id,
 				message_id: messageId,
-				text: `${stdout}`,
-			})
-
+				text: stdout
+			}).catch(err => { })
 			// Supprimer le bouton annuler
 			replyMarkup = null
 			// Supprimer le fichier
-			fs.unlinkSync(`${messageId}.ogg`)
+			fs.unlinkSync(`${messageId}.ogg`).catch(err => { })
 		});
+
+		bot.action(`cancel-${messageId}`, async (ctx) => {
+			// Supprimer le message
+			ctx.deleteMessage().catch(err => { })
+			// Envoyer un signal SIGQUIT au script python et dire que ça a bien été annulé
+			process.kill(pythonProcess.pid, 'SIGQUIT');
+
+			await bot.telegram.sendMessage(id, "La transcription a bien été annulée.").catch(err => { })
+
+			// Supprimer le fichier
+			fs.unlinkSync(`${messageId}.ogg`).catch(err => { })
+			return
+		})
 	});
+
 
 	// Action du bouton "Supprimer le contact"
 	bot.action('deletecontact', async (ctx) => {
@@ -641,7 +714,6 @@ async function logVoices() {
 			// Si on a un NOUVEAU message vocal
 			if (newLength > freebox.voicemail.length && freebox.voicemail.msgId != response?.[0]?.id) {
 				// On obtient l'ID du dernier message vocal
-				console.log('nv voc')
 				freebox.voicemail.msgId = response?.[0]?.id || null
 				freebox.voicemail.duration = response?.[0]?.duration || null
 				freebox.voicemail.gotone = true
@@ -651,14 +723,12 @@ async function logVoices() {
 
 			// Si on a des vocaux en moins
 			else if (newLength < freebox.voicemail.length) {
-				console.log('moins de vocs')
 				freebox.voicemail.length = newLength // On met à jour la taille
 				continue // On continue
 			}
 
 			// Si on a autant de vocaux
 			else if (newLength == freebox.voicemail.length && freebox.voicemail.gotone) {
-				console.log('autant de vocs')
 				// On obtient la nouvelle durée
 				var newDuration = response?.[0]?.duration || null
 				console.log(newDuration, freebox.voicemail.duration2, freebox.lastVoicemailId, freebox.voicemail.msgId)
@@ -730,7 +800,7 @@ async function logCalls() {
 
 			// Si on a pas pu s'autentifier
 			if (response?.msg == "Erreur d'authentification de l'application") {
-				bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Une erreur d'authentification est survenue. Veuillez vous reconnecter via le terminal.").catch(err => {})
+				bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Une erreur d'authentification est survenue. Veuillez vous reconnecter via le terminal.").catch(err => { })
 				return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
 			}
 
@@ -852,7 +922,7 @@ async function enableWps(ctx) {
 		bot.action(bands.map(b => `wps-${now}-${b.id}`), async (ctx) => {
 			// Obtenir l'id du bouton
 			var id = ctx.callbackQuery.data.split("-")
-			if(id?.[1] != now) return
+			if (id?.[1] != now) return
 
 			// Obtenir les infos sur le réseau
 			selected = bands.find(e => e.id == id?.[2])
