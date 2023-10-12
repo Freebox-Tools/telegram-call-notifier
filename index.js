@@ -360,6 +360,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 		var message = await ctx.reply("Vérification : Veuillez patienter").catch(err => { })
 		// Récupérer l'id du message
 		var messageId = message.message_id
+		var chatId = message.chat.id
 
 		// Si ffmpeg n'est pas installé avertir l'utilisateur
 		exec("ffmpeg -version", (error) => {
@@ -368,9 +369,9 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 				// Modifier le message
 				return ctx.editMessageText({
-					chat_id: id,
+					chat_id: chatId,
 					message_id: messageId,
-					text: "ffmpeg n'est pas installé sur votre système. Veuillez l'installer."
+					text: "Impossible de transcrire le message vocal : ffmpeg n'a pas pu être trouvé sur le système hébergeant le bot."
 				})
 			}
 		});
@@ -382,16 +383,16 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 				console.log(error)
 				// Modifier le message
 				return ctx.editMessageText({
-					chat_id: id,
+					chat_id: chatId,
 					message_id: messageId,
-					text: "Une erreur s'est produite lors de la vérification de la version de Python."
+					text: "Impossible de transcrire le message vocal : Python n'a pas pu être vérifié sur le système hébergeant le bot."
 				})
 			}
 			if (!stdout.includes('Python 3')) {
 				return ctx.editMessageText({
-					chat_id: id,
+					chat_id: chatId,
 					message_id: messageId,
-					text: "Python 3 n'est pas installé sur votre système."
+					text: "Impossible de transcrire le message vocal : Python 3 n'est pas installé sur le système hébergeant le bot."
 				})
 			}
 		});
@@ -403,16 +404,16 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 				// Modifier le message
 				return ctx.editMessageText({
-					chat_id: id,
+					chat_id: chatId,
 					message_id: messageId,
-					text: "Une erreur s'est produite lors de la vérification de la version de pip."
+					text: "Impossible de transcrire le message vocal : Pip n'a pas pu être vérifié sur le système hébergeant le bot."
 				})
 			}
 			if (!stdout.includes('pip')) {
 				return ctx.editMessageText({
-					chat_id: id,
+					chat_id: chatId,
 					message_id: messageId,
-					text: "Pip n'est pas installé sur votre système."
+					text: "Impossible de transcrire le message vocal : Pip n'est pas installé sur le système hébergeant le bot."
 				})
 			}
 		});
@@ -424,7 +425,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 				// Modifier le message
 				return ctx.editMessageText({
-					chat_id: id,
+					chat_id: chatId,
 					message_id: messageId,
 					text: "Une erreur s'est produite lors de l'installation du module openai-whisper."
 				})
@@ -437,7 +438,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 				console.log(error)
 				// Modifier le message
 				return ctx.editMessageText({
-					chat_id: id,
+					chat_id: chatId,
 					message_id: messageId,
 					text: "Une erreur s'est produite lors de l'installation du module setuptools-rust."
 				})
@@ -469,7 +470,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 			]
 		};
 		ctx.editMessageText({
-			chat_id: id,
+			chat_id: chatId,
 			message_id: messageId,
 			text: "Transcription en cours...",
 			reply_markup: replyMarkup
@@ -483,7 +484,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 				if (stderr.includes("No such file or directory")) {
 					// Modifier le message
 					return ctx.editMessageText({
-						chat_id: id,
+						chat_id: chatId,
 						message_id: messageId,
 						text: `Le script Python n'a pas été trouvé. Vérifiez que le chemin ${__dirname}/transcribe/main.py existe.`
 					})
@@ -494,7 +495,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 				// Modifier le message
 				return ctx.editMessageText({
 					parse_mode: "html",
-					chat_id: id,
+					chat_id: chatId,
 					message_id: messageId,
 					text: "Une erreur s'est produite lors de la transcription du message vocal. Vous pouvez signaler cette erreur :\n<pre>\n" + (escapeHtml(stderr || error || "Aucune erreur trouvée.")) + "\n</pre>"
 				}).catch(err => { })
@@ -506,7 +507,7 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 			console.log(stdout)
 			// Modifier le message
 			ctx.editMessageText({
-				chat_id: id,
+				chat_id: chatId,
 				message_id: messageId,
 				text: stdout
 			}).catch(err => { })
@@ -522,7 +523,8 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 			// Envoyer un signal SIGQUIT au script python et dire que ça a bien été annulé
 			process.kill(pythonProcess.pid, 'SIGQUIT');
 
-			await bot.telegram.sendMessage(id, "La transcription a bien été annulée.").catch(err => { })
+			var chatId = ctx.callbackQuery.message.chat.id
+			await bot.telegram.sendMessage(chatId, "La transcription a bien été annulée.").catch(err => { })
 
 			// Supprimer le fichier
 			fs.unlinkSync(`${messageId}.ogg`).catch(err => { })
