@@ -4,7 +4,6 @@ const fs = require('fs');
 require('dotenv').config();
 const { Telegraf } = require('telegraf')
 var bot = new Telegraf(process.env.BOT_TOKEN)
-var id = process.env.TELEGRAM_ID //TODO: ne plus utiliser ça
 var ffmpeg = require('ffmpeg');
 const { exec } = require("child_process");
 const fetch = require('node-fetch');
@@ -39,16 +38,19 @@ async function getSupabaseUsers() {
 		})
 
 		// On s'authentifie
+		console.log(`[CONNECTION] (start) Connexion à la Freebox ${getFreeboxName(user.boxModel)} pour l'utilisateur ${user.userId}...`)
+		var start = performance.now()
 		var response = await freebox.authentificate()
 		if (!response?.success) {
+			console.log(`[CONNECTION] (fail) Impossible de se connecter à la Freebox ${getFreeboxName(user.boxModel)} pour l'utilisateur ${user.userId} (après ${Math.round(performance.now() - start)}ms) : `, response)
 			// On prévient l'utilisateur
 			bot.telegram.sendMessage(user.userId, "Nous n'avons pas pu vous connecter à votre Freebox. Nous réessayerons plus tard. Si le problème persiste, veuillez vous déconnecter et vous reconnecter.").catch(err => {
 				if (err.code == "ECONNRESET" || err.code == "ECONNREFUSED" || err.code == "ETIMEDOUT" || err.code == "ENOTFOUND" || err.code == "EAI_AGAIN" || err.code == "ECONNABORTED") return
-				console.log(`Impossible de contacter l'utilisateur ${user.userId} : `, err)
+				console.log(`[CONNECTION] (fail) Impossible de contacter l'utilisateur ${user.userId} : `, err)
 				return disconnectBox(user.userId, user.id)
 			})
 		}
-		else console.log(`(nouvel utilisateur) Connecté à la Freebox ${getFreeboxName(user.boxModel)} pour l'utilisateur ${user.userId}.`)
+		else console.log(`[CONNECTION] (success) Connecté à la Freebox ${getFreeboxName(user.boxModel)} pour l'utilisateur ${user.userId} en ${Math.round(performance.now() - start)}ms.`)
 
 		// On ajoute la Freebox à la liste
 		freeboxs.push({
@@ -59,8 +61,8 @@ async function getSupabaseUsers() {
 			id: user.id
 		})
 
-		// On attend 1 seconde avant de continuer
-		await new Promise(r => setTimeout(r, 1000));
+		// On attend 500ms avant de continuer
+		await new Promise(r => setTimeout(r, 500));
 	}
 
 	// On retourne que c'est bon
@@ -72,11 +74,6 @@ setInterval(() => getSupabaseUsers(), 1000 * 60 * 5)
 
 // Liste des boxs connectées
 var freeboxs = []
-
-// TODO: on précisera dans Le README qu'il faut pas leak la SUPABASE_PUBLIC_KEY mm si le nom indique qu'elle est publique, c'est pas vrm le cas
-// TODO: on précisera aussi dans le README d'activer les RLS (voir celle déjà définit dans la base de données)
-
-// TODO: on testera que le bot NE marche PAS sur des groupes / sur des canaux
 
 // Liste des réponses d'utilisateur qu'on attend
 var waitingForReplies = []
@@ -95,7 +92,6 @@ function escapeHtml(text) {
 
 // Liste des noms des Freebox
 function getFreeboxName(name) {
-	console.log(name)
 	if (name.includes("Server Mini")) return "Mini 4K"
 	if (name.includes("Delta") || name.includes("v7")) return "Delta"
 	if (name.includes("Pop") || name.includes("v8")) return "Pop"
@@ -295,7 +291,13 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 		// On vérifie que l'utilisateur est bien connecté
 		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
-		ctx.reply("Votre numéro de téléphone fixe est le : " + await myNumber(ctx)).catch(err => { })
+		// On indique que le bot écrit
+		// TODO: faudrait l'intégrer dans tte les fonctions mais big flm
+		// ctx.sendChatAction("typing").catch(err => { })
+
+		// On obtient et envoie le numéro
+		var phone_number = await myNumber(ctx)
+		ctx.reply(`Votre numéro de téléphone fixe est ${phone_number ? 'le : ' + phone_number : "inconnu. Vous n'êtes peut-être pas encore connecté à votre Freebox, réessayer ultérieurement."}`).catch(err => { })
 	})
 
 	// Action du bouton "Créer un contact"
@@ -503,9 +505,8 @@ En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay<
 
 			if (error) return ctx.editMessageText("Une erreur s'est produite lors de l'exécution du script Python.", error).catch(err => { });
 			if (stderr) return ctx.editMessageText("Une erreur s'est produite lors de l'exécution du script Python.", stderr).catch(err => { });
-			// On envoie la transcription
-			console.log(stdout)
-			// Modifier le message
+
+			// On envoie la transcription en modifiant le message
 			ctx.editMessageText({
 				chat_id: chatId,
 				message_id: messageId,
@@ -733,7 +734,7 @@ async function logVoices() {
 			else if (newLength == freebox.voicemail.length && freebox.voicemail.gotone) {
 				// On obtient la nouvelle durée
 				var newDuration = response?.[0]?.duration || null
-				console.log(newDuration, freebox.voicemail.duration2, freebox.lastVoicemailId, freebox.voicemail.msgId)
+				console.log(newDuration, freebox.voicemail.duration2, freebox.lastVoicemailId, freebox.voicemail.msgId) // tjr utile parfois pendant un debug, c'est cheum mais utile
 
 				// Si la durée a changé deux fois, on déduit que le vocal est finalisé
 				if (newDuration == freebox.voicemail.duration2 && freebox.lastVoicemailId != freebox.voicemail.msgId) {
