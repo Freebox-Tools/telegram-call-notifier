@@ -12,7 +12,9 @@ Call Notifier vous informe avant même que votre téléphone ne sonne ! Il indiq
 ## Fonctionnalités
 
 - Notification instantanée lors d'un appel entrant.
+
 ![Appel entrant](assets/image.png)
+
 - Envoie un message vocal lorsque votre correspondant laisse un message sur votre répondeur.
 ![Vocal](assets/image1.jpg)
 - Obtenir une retranscription du message laissé sur votre répondeur. (expérimental.)
