@@ -4,7 +4,6 @@ const fs = require('fs');
 require('dotenv').config();
 const { Telegraf } = require('telegraf')
 var bot = new Telegraf(process.env.BOT_TOKEN)
-var id = process.env.TELEGRAM_ID //TODO: ne plus utiliser ça
 var ffmpeg = require('ffmpeg');
 const { exec } = require("child_process");
 const fetch = require('node-fetch');
@@ -72,11 +71,6 @@ setInterval(() => getSupabaseUsers(), 1000 * 60 * 5)
 
 // Liste des boxs connectées
 var freeboxs = []
-
-// TODO: on précisera dans Le README qu'il faut pas leak la SUPABASE_PUBLIC_KEY mm si le nom indique qu'elle est publique, c'est pas vrm le cas
-// TODO: on précisera aussi dans le README d'activer les RLS (voir celle déjà définit dans la base de données)
-
-// TODO: on testera que le bot NE marche PAS sur des groupes / sur des canaux
 
 // Liste des réponses d'utilisateur qu'on attend
 var waitingForReplies = []
