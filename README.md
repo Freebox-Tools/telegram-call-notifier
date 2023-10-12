@@ -16,16 +16,26 @@ Call Notifier vous informe avant même que votre téléphone ne sonne ! Il indiq
 ![Appel entrant](assets/image.png)
 
 - Envoie un message vocal lorsque votre correspondant laisse un message sur votre répondeur.
+  
 ![Vocal](assets/image1.jpg)
+
 - Obtenir une retranscription du message laissé sur votre répondeur. (expérimental.)
 ![Retranscription](assets/image3.jpg)
+
 - Afficher votre numéro de téléphone fixe.
+  
 ![Numéro de téléphone](assets/image4.png)
+
 - Ajouter un contact dans votre répertoire.
+  
 ![Ajouter un contact](assets/image5.jpg)
+
 - Afficher le numéro de téléphone d'un de vos contacts.
+  
 ![Numéro d'un contact](assets/image6.jpg)
+
 - Supprimer un contact de votre répertoire.
+  
 ![Supprimer un contact](assets/image7.jpg)
 
 _____
