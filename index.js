@@ -813,7 +813,14 @@ async function logCalls() {
 
 			// Si il y a une erreur, informer l'utilisateur
 			if (!response?.success) {
-				bot.telegram.sendMessage(freebox.chatId || freebox.userId, `Une erreur est survenue${response?.msg || response?.message || typeof response == 'object' ? ` : ${response.msg || response.message || JSON.stringify(response)}` : "... Signaler ce problème."}`).catch(err => {
+				// Si l'app n'a pas la permission
+				if (response?.msg == "Cette application n'est pas autorisée à accéder à cette fonction") {
+					bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Il semblerait que Call Notifier n'ait pas la permission d'accéder aux appels. Veuillez vous reconnecter via le terminal.").catch(err => { })
+					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
+				}
+
+				// Sinon on envoie un simple message d'erreur (ça risque de spam l'utilisateur mais bon)
+				else bot.telegram.sendMessage(freebox.chatId || freebox.userId, `Une erreur est survenue${response?.msg || response?.message || typeof response == 'object' ? ` : ${response.msg || response.message || JSON.stringify(response)}` : "... Signaler ce problème."}`).catch(err => {
 					if (err.code == "ECONNRESET" || err.code == "ECONNREFUSED" || err.code == "ETIMEDOUT" || err.code == "ENOTFOUND" || err.code == "EAI_AGAIN" || err.code == "ECONNABORTED") return
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
 					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
