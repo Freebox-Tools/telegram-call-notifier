@@ -22,7 +22,7 @@ Si vous souhaitez l'hébergez vous même rendez-vous sur le [Wiki](https://githu
 ![Vocal](assets/image1.jpg)
 
 - Obtenir une retranscription du message laissé sur votre répondeur. (expérimental.)
-- 
+
 ![Retranscription](assets/image3.jpg)
 
 - Afficher votre numéro de téléphone fixe.
