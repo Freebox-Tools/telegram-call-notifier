@@ -8,6 +8,8 @@ Call Notifier vous informe avant même que votre téléphone ne sonne ! Il indiq
 
 <a href="https://t.me/freebox_call_notifier_bot"> <img src="assets/on-telegram.png"> </a>
 
+Si vous souhaitez l'hébergez vous même rendez-vous sur le [Wiki](https://github.com/Freebox-Tools/telegram-call-notifier/wiki)
+
 
 ## Fonctionnalités
 
@@ -20,6 +22,7 @@ Call Notifier vous informe avant même que votre téléphone ne sonne ! Il indiq
 ![Vocal](assets/image1.jpg)
 
 - Obtenir une retranscription du message laissé sur votre répondeur. (expérimental.)
+- 
 ![Retranscription](assets/image3.jpg)
 
 - Afficher votre numéro de téléphone fixe.
