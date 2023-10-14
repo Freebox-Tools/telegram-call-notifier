@@ -44,6 +44,10 @@ Si vous souhaitez l'hébergez vous même rendez-vous sur le [Wiki](https://githu
 _____
 - Pouvoir activer le WPS et connecter un appareil sans entrer votre mot de passe.
 
+https://github.com/Freebox-Tools/telegram-call-notifier/assets/79168733/a0989d41-48e0-440e-939b-14f46faf965a
+
+*Après exécution de la commande wps.*
+
 
 ## À savoir
 
