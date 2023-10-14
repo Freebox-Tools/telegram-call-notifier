@@ -8,7 +8,7 @@ Call Notifier vous informe avant même que votre téléphone ne sonne ! Il indiq
 
 <a href="https://t.me/freebox_call_notifier_bot"> <img src="assets/on-telegram.png"> </a>
 
-Si vous souhaitez l'hébergez vous même rendez-vous sur le [Wiki](https://github.com/Freebox-Tools/telegram-call-notifier/wiki)
+Si vous souhaitez l'hébergez vous même rendez-vous sur le [Wiki](https://github.com/Freebox-Tools/telegram-call-notifier/wiki/H%C3%A9berger-soi%E2%80%90m%C3%AAme)
 
 
 ## Fonctionnalités
@@ -22,7 +22,7 @@ Si vous souhaitez l'hébergez vous même rendez-vous sur le [Wiki](https://githu
 ![Vocal](assets/image1.jpg)
 
 - Obtenir une retranscription du message laissé sur votre répondeur. (expérimental.)
-- 
+
 ![Retranscription](assets/image3.jpg)
 
 - Afficher votre numéro de téléphone fixe.
@@ -43,6 +43,10 @@ Si vous souhaitez l'hébergez vous même rendez-vous sur le [Wiki](https://githu
 
 _____
 - Pouvoir activer le WPS et connecter un appareil sans entrer votre mot de passe.
+
+https://github.com/Freebox-Tools/telegram-call-notifier/assets/79168733/a0989d41-48e0-440e-939b-14f46faf965a
+
+*Après exécution de la commande wps.*
 
 
 ## À savoir
