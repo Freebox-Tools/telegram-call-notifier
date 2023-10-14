@@ -142,10 +142,11 @@ async function main() {
 	// Fonctions importantes qui s'exécutent en temps réel
 	logCalls()
 	logVoices()
+}
 
-	// Commande start du bot pour une première connexion en lui expliquant au fur et à mesure
-	bot.command('start', (ctx) => {
-		ctx.replyWithHTML(`
+// Commande start du bot pour une première connexion en lui expliquant au fur et à mesure
+bot.command('start', (ctx) => {
+	ctx.replyWithHTML(`
 Bienvenue dans Freebox Call Notifier ! Ce bot vous permet de recevoir une notification lors d'un appel entrant sur votre Freebox.
 
 Pour associer une Freebox à votre compte Telegram, vous devrez utiliser l'assistant de configuration via terminal sur un ordinateur connecté au même réseau que votre Freebox.
@@ -157,524 +158,524 @@ Pour associer une Freebox à votre compte Telegram, vous devrez utiliser l'assis
 
 En cas de problème, vous pouvez contacter <a href="https://t.me/el2zay">el2zay</a>.
 <i>Non-affilié à Free et Iliad.</i>`
-			, { disable_web_page_preview: true, allow_sending_without_reply: true }).catch(err => { })
-	})
+		, { disable_web_page_preview: true, allow_sending_without_reply: true }).catch(err => { })
+})
 
-	// Commande logout
-	bot.command('logout', async (ctx) => {
-		// On vérifie que l'utilisateur est bien connecté
-		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+// Commande logout
+bot.command('logout', async (ctx) => {
+	// On vérifie que l'utilisateur est bien connecté
+	if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
-		// Créer un identifiant unique pour les boutons
-		var id = Date.now();
+	// Créer un identifiant unique pour les boutons
+	var id = Date.now();
 
-		// Demander à l'utilisateur de confirmer
-		var replyMarkup = {
-			inline_keyboard: [
-				[
-					{
-						text: "Se déconnecter",
-						callback_data: `yes-${id}`
-					},
-					{
-						text: "Annuler",
-						callback_data: `no-${id}`
-					},
-				]
+	// Demander à l'utilisateur de confirmer
+	var replyMarkup = {
+		inline_keyboard: [
+			[
+				{
+					text: "Se déconnecter",
+					callback_data: `yes-${id}`
+				},
+				{
+					text: "Annuler",
+					callback_data: `no-${id}`
+				},
 			]
-		};
+		]
+	};
 
-		// Afficher un message d'attention avec les boutons.
-		ctx.replyWithHTML("⚠️ <b>ATTENTION :</b> Lors de la déconnexion, toutes les données enregistrées sur nos serveurs seront supprimées et vous ne serez plus notifié lors d'un appel entrant.\nSi vous souhaitez vous reconnecter plus tard, vous devrez recommencer le processus d'installation via terminal.\n\n<b>Êtes-vous sûr de vouloir vous déconnecter ?</b>", {
-			reply_markup: replyMarkup
-		}).catch(err => { })
+	// Afficher un message d'attention avec les boutons.
+	ctx.replyWithHTML("⚠️ <b>ATTENTION :</b> Lors de la déconnexion, toutes les données enregistrées sur nos serveurs seront supprimées et vous ne serez plus notifié lors d'un appel entrant.\nSi vous souhaitez vous reconnecter plus tard, vous devrez recommencer le processus d'installation via terminal.\n\n<b>Êtes-vous sûr de vouloir vous déconnecter ?</b>", {
+		reply_markup: replyMarkup
+	}).catch(err => { })
 
-		// Si on annule
-		bot.action(`no-${id}`, async (ctx) => {
-			// Répondre et supprimer le message
-			ctx.answerCbQuery("Action annulé ! Vous ne serez pas déconnecté.").catch(err => { })
-			ctx.deleteMessage().catch(err => { })
-		})
-
-		// Si on confirme
-		bot.action(`yes-${id}`, async (ctx) => {
-			// Supprimer les informations de la base de données
-			await disconnectBox(ctx?.update?.callback_query?.from?.id)
-
-			// Répondre et supprimer le message
-			ctx.deleteMessage().catch(err => { })
-			ctx.reply("Vous avez été déconnecté. Une attente de quelques minutes est nécessaire avant la suppression totale de vos données.").catch(err => { })
-			await getSupabaseUsers() // On met à jour les utilisateurs
-		})
-	})
-
-	// Commande voicemail
-	bot.command('voicemail', async (ctx) => {
-		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
-		await sendVoicemail(ctx.from.id)
-	})
-
-	// Commande wps
-	bot.command('wps', async (ctx) => {
-		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
-		await enableWps(ctx)
-	})
-
-	// Commande contact
-	bot.command('contact', async (ctx) => {
-		// On vérifie que l'utilisateur est bien connecté
-		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
-
-		// Si on a un argument, on envoie directement le contact
-		if (ctx.message.text.split(" ").length > 1) {
-			var name = ctx.message.text.split(" ")[1]
-			return await getContact(name, ctx)
-		}
-
-		// Sinon, on demande à l'utilisateur d'envoyer le nom du contact
-		ctx.reply("Veuillez envoyer le nom du contact à chercher.").catch(err => { })
-
-		// On attend la réponse de l'utilisateur
-		if (waitingForReplies.find(e => e.userId == ctx.message.from.id)) waitingForReplies = waitingForReplies.filter(e => e.userId != ctx.message.from.id)
-		waitingForReplies.push({
-			userId: ctx.message.from.id,
-			created: Date.now(),
-			type: "contact",
-			ctx: ctx
-		})
-	})
-
-	// Commande createcontact
-	bot.command('createcontact', (ctx) => {
-		// On vérifie que l'utilisateur est bien connecté
-		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
-
-		// Demander à l'utilisateur d'envoyer un message
-		ctx.reply("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : Jean, 0123456789").catch(err => { })
-
-		// On attend la réponse de l'utilisateur
-		if (waitingForReplies.find(e => e.userId == ctx.message.from.id)) waitingForReplies = waitingForReplies.filter(e => e.userId != ctx.message.from.id)
-		waitingForReplies.push({
-			userId: ctx.message.from.id,
-			created: Date.now(),
-			type: "createcontact-via-cmd",
-			ctx: ctx
-		})
-	})
-
-	// Commande deletecontact
-	bot.command('deletecontact', async (ctx) => {
-		// On vérifie que l'utilisateur est bien connecté
-		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
-
-		// Si après deletecontact il y a un nom, on execute la fonction deleteContact
-		if (ctx.message.text.split(" ").length > 1) {
-			var name = ctx.message.text.split(" ")[1]
-			return await deleteContact(name, ctx)
-		}
-
-		// Sinon, on demande à l'utilisateur d'envoyer le nom du contact
-		ctx.reply("Veuillez envoyer le nom du contact à supprimer.").catch(err => { })
-
-		// On attend la réponse de l'utilisateur
-		if (waitingForReplies.find(e => e.userId == ctx.message.from.id)) waitingForReplies = waitingForReplies.filter(e => e.userId != ctx.message.from.id)
-		waitingForReplies.push({
-			userId: ctx.message.from.id,
-			created: Date.now(),
-			type: "deletecontact",
-			ctx: ctx
-		})
-	})
-
-	// Commande mynumber
-	bot.command('mynumber', async (ctx) => {
-		// On vérifie que l'utilisateur est bien connecté
-		if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
-
-		// On indique que le bot écrit
-		// TODO: faudrait l'intégrer dans tte les fonctions mais big flm
-		// ctx.sendChatAction("typing").catch(err => { })
-
-		// On obtient et envoie le numéro
-		var phone_number = await myNumber(ctx)
-		ctx.reply(`Votre numéro de téléphone fixe est ${phone_number ? 'le : ' + phone_number : "inconnu. Vous n'êtes peut-être pas encore connecté à votre Freebox, réessayer ultérieurement."}`).catch(err => { })
-	})
-
-	// Action du bouton "Créer un contact"
-	bot.action('createcontact', async (ctx) => {
-		// Déterminer le numéro de téléphone
-		var message = ctx.callbackQuery.message.text
-		var num = message.split("de")[1].split("(")[0].trim()
-
-		// Si le numéro est masqué, ne rien faire
-		if (num == "Numéro masqué") return ctx.answerCbQuery("Impossible de créer le contact puisque le numéro est masqué.").catch(err => { })
-
-		// Demander le nom du contact
-		ctx.reply(`Veuillez envoyer le nom du contact à ajouter au numéro "${num}"`).catch(err => { })
-
-		// On attend la réponse de l'utilisateur
-		if (waitingForReplies.find(e => e.userId == ctx.callbackQuery.from.id)) waitingForReplies = waitingForReplies.filter(e => e.userId != ctx.callbackQuery.from.id)
-		waitingForReplies.push({
-			userId: ctx.callbackQuery.from.id,
-			created: Date.now(),
-			type: "createcontact-via-btn",
-			ctx: ctx,
-			num: num
-		})
-	})
-
-	bot.action('delete-voicemail', async (ctx) => {
-		// Obtenir les infos sur l'utilisateur
-		const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
-		const freebox = freeboxs.find(e => e.userId == userId)
-
-		// Récupérer les messages vocaux
-		var response = await freebox?.client?.fetch({
-			method: "GET",
-			url: "v10/call/voicemail/",
-			parseJson: true
-		});
-		count = response?.result?.length || 0
-
-		// Récupérer le dernier
-		response.result = response?.result?.sort((a, b) => b.date - a.date)
-		response = response?.result?.[0] || null
-
-		// Si on a pas de messages vocaux
-		if (!response) return ctx.answerCbQuery("Vous n'avez aucun message vocal.").catch(err => { })
-
-		// Supprimer le message vocal
-		var { error } = await freebox?.client?.fetch({
-			method: "DELETE",
-			url: `v10/call/voicemail/${response.id}/`
-		})
-
-		// Si on a pas pu supprimer le vocal
-		if (error) return ctx.answerCbQuery("Impossible de supprimer le message vocal : " + error.msg || error.message || error).catch(err => { })
-
-		// Répondre en disant qu'il a bien été supprimé
-		ctx.answerCbQuery(`Le message vocal a bien été supprimé. Il vous reste ${count - 1} message${count - 1 > 1 ? "s" : ""} vocal${count - 1 > 1 ? "s" : ""}.`).catch(err => { })
-	})
-
-	// Action du bouton "transcribe-voicemail"
-	bot.action('transcribe-voicemail', async (ctx) => {
-		// Action du bouton annuler
-		var message = await ctx.reply("Vérification : Veuillez patienter").catch(err => { })
-		// Récupérer l'id du message
-		var messageId = message.message_id
-		var chatId = message.chat.id
-
-		// Si ffmpeg n'est pas installé avertir l'utilisateur
-		exec("ffmpeg -version", (error) => {
-			if (error) {
-				console.log(error)
-
-				// Modifier le message
-				return ctx.editMessageText({
-					chat_id: chatId,
-					message_id: messageId,
-					text: "Impossible de transcrire le message vocal : ffmpeg n'a pas pu être trouvé sur le système hébergeant le bot."
-				})
-			}
-		});
-
-		// Vérifier si python est installé
-		const command = process.platform === 'win32' ? 'python' : 'python3';
-		exec(`${command} --version`, (error, stdout, stderr) => {
-			if (error) {
-				console.log(error)
-				// Modifier le message
-				return ctx.editMessageText({
-					chat_id: chatId,
-					message_id: messageId,
-					text: "Impossible de transcrire le message vocal : Python n'a pas pu être vérifié sur le système hébergeant le bot."
-				})
-			}
-			if (!stdout.includes('Python 3')) {
-				return ctx.editMessageText({
-					chat_id: chatId,
-					message_id: messageId,
-					text: "Impossible de transcrire le message vocal : Python 3 n'est pas installé sur le système hébergeant le bot."
-				})
-			}
-		});
-
-		// Vérifier si pip est installé
-		exec(`${command} -m pip --version`, (error, stdout, stderr) => {
-			if (error) {
-				console.log(error)
-
-				// Modifier le message
-				return ctx.editMessageText({
-					chat_id: chatId,
-					message_id: messageId,
-					text: "Impossible de transcrire le message vocal : Pip n'a pas pu être vérifié sur le système hébergeant le bot."
-				})
-			}
-			if (!stdout.includes('pip')) {
-				return ctx.editMessageText({
-					chat_id: chatId,
-					message_id: messageId,
-					text: "Impossible de transcrire le message vocal : Pip n'est pas installé sur le système hébergeant le bot."
-				})
-			}
-		});
-
-		// Exécuter la commande pip install -U openai-whisper
-		exec(`pip install -U openai-whisper`, (error) => {
-			if (error) {
-				console.log(error)
-
-				// Modifier le message
-				return ctx.editMessageText({
-					chat_id: chatId,
-					message_id: messageId,
-					text: "Une erreur s'est produite lors de l'installation du module openai-whisper."
-				})
-			}
-		})
-
-		// Executer la commande pip install setuptools-rust
-		exec(`pip install setuptools-rust`, (error) => {
-			if (error) {
-				console.log(error)
-				// Modifier le message
-				return ctx.editMessageText({
-					chat_id: chatId,
-					message_id: messageId,
-					text: "Une erreur s'est produite lors de l'installation du module setuptools-rust."
-				})
-			}
-		});
-
-		// Récupérer le chemin du fichier vocal
-		const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/getFile?file_id=${ctx.callbackQuery.message.audio.file_id}`);
-		const data = await response.json();
-		const filePath = data.result.file_path;
-
-		// Récupérer le fichier vocal grâce a fetch
-		const fileResponse = await fetch(`https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${filePath}`);
-		const fileData = await fileResponse.buffer();
-
-		// Ecrire les données du fichier
-		fs.writeFileSync(`${messageId}.ogg`, fileData)
-
-		// Ajouter le bouton annuler
-		replyMarkup = {
-			inline_keyboard: [
-				[
-					{
-						text: "Annuler",
-						callback_data: `cancel-${messageId}`,
-
-					}
-				]
-			]
-		};
-		ctx.editMessageText({
-			chat_id: chatId,
-			message_id: messageId,
-			text: "Transcription en cours...",
-			reply_markup: replyMarkup
-		})
-		// Executer le script python
-		const pythonProcess = exec(`${command} transcribe/main.py ${messageId}.ogg`, { maxBuffer: 1024 * 10000 }, async (error, stdout, stderr) => {
-			// Stocker la sortie standard
-			// Si on a une erreur
-			if (error || stderr) {
-				// Si l'erreur est que transcribe/main.py n'existe pas
-				if (stderr.includes("No such file or directory")) {
-					// Modifier le message
-					return ctx.editMessageText({
-						chat_id: chatId,
-						message_id: messageId,
-						text: `Le script Python n'a pas été trouvé. Vérifiez que le chemin ${__dirname}/transcribe/main.py existe.`
-					})
-				}
-				// Supprimer le fichier
-				try { fs.unlinkSync(`${messageId}.ogg`) } catch (err) { }
-
-				// Modifier le message
-				return ctx.editMessageText({
-					parse_mode: "html",
-					chat_id: chatId,
-					message_id: messageId,
-					text: "Une erreur s'est produite lors de la transcription du message vocal. Vous pouvez signaler cette erreur :\n<pre>\n" + (escapeHtml(stderr || error || "Aucune erreur trouvée.")) + "\n</pre>"
-				}).catch(err => { })
-			}
-
-			if (error) return ctx.editMessageText("Une erreur s'est produite lors de l'exécution du script Python.", error).catch(err => { });
-			if (stderr) return ctx.editMessageText("Une erreur s'est produite lors de l'exécution du script Python.", stderr).catch(err => { });
-
-			// On envoie la transcription en modifiant le message
-			ctx.editMessageText({
-				chat_id: chatId,
-				message_id: messageId,
-				text: stdout
-			}).catch(err => { })
-			// Supprimer le bouton annuler
-			replyMarkup = null
-			// Supprimer le fichier
-			fs.unlinkSync(`${messageId}.ogg`).catch(err => { })
-		});
-
-		bot.action(`cancel-${messageId}`, async (ctx) => {
-			// Supprimer le message
-			ctx.deleteMessage().catch(err => { })
-			// Envoyer un signal SIGQUIT au script python et dire que ça a bien été annulé
-			process.kill(pythonProcess.pid, 'SIGQUIT');
-
-			var chatId = ctx.callbackQuery.message.chat.id
-			await bot.telegram.sendMessage(chatId, "La transcription a bien été annulée.").catch(err => { })
-
-			// Supprimer le fichier
-			fs.unlinkSync(`${messageId}.ogg`).catch(err => { })
-			return
-		})
-	});
-
-
-	// Action du bouton "Supprimer le contact"
-	bot.action('deletecontact', async (ctx) => {
-		// Déterminer le nom du contact
-		var message = ctx.callbackQuery.message.text
-
-		// Le nom se trouve après "du contact" et se trouve entre guillemet
-		var name = message.split("du contact")[1].split('"')[1].trim()
-
-		// Supprimer le contact
-		await deleteContact(name, ctx)
-
-		// Supprimer le message
+	// Si on annule
+	bot.action(`no-${id}`, async (ctx) => {
+		// Répondre et supprimer le message
+		ctx.answerCbQuery("Action annulé ! Vous ne serez pas déconnecté.").catch(err => { })
 		ctx.deleteMessage().catch(err => { })
 	})
 
-	// Détecter l'envoi d'un message
-	// Note: Ce code doit rester en dessous des autres commandes.
-	bot.on('message', async (ctx) => {
-		// Empêcher un message envoyé avant le démarrage du bot d'être traité
-		if (ctx?.message?.date && ctx.message.date < Math.floor(Date.now() / 1000) - 10) return console.log("Un message envoyé avant le démarrage du bot a été ignoré.")
+	// Si on confirme
+	bot.action(`yes-${id}`, async (ctx) => {
+		// Supprimer les informations de la base de données
+		await disconnectBox(ctx?.update?.callback_query?.from?.id)
 
-		// Texte originale
-		var text = ctx?.message?.text || ctx?.callbackQuery?.message?.text
-		if (text) text = text.trim()
-		if (!text) return
+		// Répondre et supprimer le message
+		ctx.deleteMessage().catch(err => { })
+		ctx.reply("Vous avez été déconnecté. Une attente de quelques minutes est nécessaire avant la suppression totale de vos données.").catch(err => { })
+		await getSupabaseUsers() // On met à jour les utilisateurs
+	})
+})
 
-		// Auteur du message
-		var author = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
+// Commande voicemail
+bot.command('voicemail', async (ctx) => {
+	if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+	await sendVoicemail(ctx.from.id)
+})
 
-		// Récupérer le message et vérifier que c'est un code
-		var parsedText = parseInt(text)
-		if (!parsedText || (parsedText && (isNaN(parsedText) || text.length != 6))) { // Si c'est PAS un code
-			// On récupère si on doit attendre une réponse de l'utilisateur
-			var waitingForReply = waitingForReplies.find(e => e.userId == author)
-			if (!waitingForReply) return // Si on attend pas de réponse, on ne fait rien
-			if (waitingForReply.created < Date.now() - (1000 * 60 * 10)) waitingForReplies = waitingForReplies.filter(e => e.userId != author) // On laisse max 10 minutes pour répondre
+// Commande wps
+bot.command('wps', async (ctx) => {
+	if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
+	await enableWps(ctx)
+})
 
-			// On récupère le type de réponse qu'on attend
-			var type = waitingForReply.type
-			if (type == "createcontact-via-cmd") { // Si on attend une réponse pour créer un contact via la commande
-				// On récupère le nom et le numéro
-				var name = text.split(",")[0];
-				var num = text.split(",")[1];
+// Commande contact
+bot.command('contact', async (ctx) => {
+	// On vérifie que l'utilisateur est bien connecté
+	if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
-				// Si il n y a pas de virgule expliquez comment il faut faire.
-				if (!name) return ctx.replyWithHTML("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : <b>Jean</b>, 0123456789").catch(err => { })
-				if (!num) return ctx.replyWithHTML("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : Jean, <b>0123456789</b>").catch(err => { })
+	// Si on a un argument, on envoie directement le contact
+	if (ctx.message.text.split(" ").length > 1) {
+		var name = ctx.message.text.split(" ")[1]
+		return await getContact(name, ctx)
+	}
 
-				// Enlever les espaces du numéro
-				num = num.trim()
+	// Sinon, on demande à l'utilisateur d'envoyer le nom du contact
+	ctx.reply("Veuillez envoyer le nom du contact à chercher.").catch(err => { })
 
-				// Si numero ne contient pas que des chiffres
-				if (num.match(/[^0-9]/g)) return ctx.reply("Le numéro ne peut contenir que des chiffres.").catch(err => { })
+	// On attend la réponse de l'utilisateur
+	if (waitingForReplies.find(e => e.userId == ctx.message.from.id)) waitingForReplies = waitingForReplies.filter(e => e.userId != ctx.message.from.id)
+	waitingForReplies.push({
+		userId: ctx.message.from.id,
+		created: Date.now(),
+		type: "contact",
+		ctx: ctx
+	})
+})
 
-				// On créé le contact
-				var created = await createContact(name, num, ctx);
+// Commande createcontact
+bot.command('createcontact', (ctx) => {
+	// On vérifie que l'utilisateur est bien connecté
+	if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
-				// Si il y a une erreur, informer l'utilisateur
-				if (created != true) return ctx.reply(`Une erreur est survenue${created == false ? '...' : ` : ${created}`}`).catch(err => { })
-				else ctx.reply("Le contact a bien été créé.").catch(err => { })
+	// Demander à l'utilisateur d'envoyer un message
+	ctx.reply("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : Jean, 0123456789").catch(err => { })
 
-				// On supprime l'attente
-				waitingForReplies = waitingForReplies.filter(e => e.userId != author)
-			}
-			else if (type == "createcontact-via-btn") { // Si on attend une réponse pour créer un contact via le bouton
-				// On créé le contact
-				var created = await createContact(text, waitingForReply.num, ctx);
+	// On attend la réponse de l'utilisateur
+	if (waitingForReplies.find(e => e.userId == ctx.message.from.id)) waitingForReplies = waitingForReplies.filter(e => e.userId != ctx.message.from.id)
+	waitingForReplies.push({
+		userId: ctx.message.from.id,
+		created: Date.now(),
+		type: "createcontact-via-cmd",
+		ctx: ctx
+	})
+})
 
-				// Si il y a une erreur, informer l'utilisateur
-				if (created != true) return ctx.reply(`Une erreur est survenue${created == false ? '...' : ` : ${created}`}`).catch(err => { })
-				else ctx.reply("Le contact a bien été créé.").catch(err => { })
+// Commande deletecontact
+bot.command('deletecontact', async (ctx) => {
+	// On vérifie que l'utilisateur est bien connecté
+	if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
-				// On supprime l'attente
-				waitingForReplies = waitingForReplies.filter(e => e.userId != author)
-			}
-			else if (type == "contact") { // Si on attend une réponse pour chercher un contact
-				// On récupère le nom
-				var name = text;
+	// Si après deletecontact il y a un nom, on execute la fonction deleteContact
+	if (ctx.message.text.split(" ").length > 1) {
+		var name = ctx.message.text.split(" ")[1]
+		return await deleteContact(name, ctx)
+	}
 
-				// On récupère le contact
-				await getContact(name, ctx)
+	// Sinon, on demande à l'utilisateur d'envoyer le nom du contact
+	ctx.reply("Veuillez envoyer le nom du contact à supprimer.").catch(err => { })
 
-				// On supprime l'attente
-				waitingForReplies = waitingForReplies.filter(e => e.userId != author)
-			}
-			else if (type == "deletecontact") { // Si on attend une réponse pour supprimer un contact
-				// On récupère le nom
-				var name = text;
+	// On attend la réponse de l'utilisateur
+	if (waitingForReplies.find(e => e.userId == ctx.message.from.id)) waitingForReplies = waitingForReplies.filter(e => e.userId != ctx.message.from.id)
+	waitingForReplies.push({
+		userId: ctx.message.from.id,
+		created: Date.now(),
+		type: "deletecontact",
+		ctx: ctx
+	})
+})
 
-				// On supprime le contact
-				await deleteContact(name, ctx)
+// Commande mynumber
+bot.command('mynumber', async (ctx) => {
+	// On vérifie que l'utilisateur est bien connecté
+	if (!users.find(e => e.userId == ctx.message.from.id)) return ctx.reply("Vous n'êtes pas connecté à une Freebox. Utiliser la commande /start pour débuter.").catch(err => { })
 
-				// On supprime l'attente
-				waitingForReplies = waitingForReplies.filter(e => e.userId != author)
-			}
+	// On indique que le bot écrit
+	// TODO: faudrait l'intégrer dans tte les fonctions mais big flm
+	// ctx.sendChatAction("typing").catch(err => { })
 
-		} else { // Si c'est un code valide :
-			// Obtenir le code unique dans la base de données
-			var { data, error } = await supabase.from("uniquecode").select("*").eq("code", text)
-			if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu récupérer les informations de ce code dans la base des données. Veuillez signaler ce problème.").catch(err => { })
+	// On obtient et envoie le numéro
+	var phone_number = await myNumber(ctx)
+	if(typeof phone_number == 'object') return
+	else ctx.reply(`Votre numéro de téléphone fixe est ${phone_number ? 'le : ' + phone_number : "inconnu. Vous n'êtes peut-être pas encore connecté à votre Freebox, réessayer ultérieurement."}`).catch(err => { })
+})
 
-			// Si on a pas de données
-			if (!data?.length) return ctx.reply("Oups, on dirait bien que ce code n'existe pas. Celui-ci a peut-être expiré, ou est mal écrit. Dans le cas où vous hébergez vous-même le service, vérifier que vous avez entré la bonne URL d'API lors de l'utilisation du CLI.").catch(err => { })
+// Action du bouton "Créer un contact"
+bot.action('createcontact', async (ctx) => {
+	// Déterminer le numéro de téléphone
+	var message = ctx.callbackQuery.message.text
+	var num = message.split("de")[1].split("(")[0].trim()
 
-			// Si on a un code, on l'associe à l'utilisateur
-			var { error } = await supabase.from("uniquecode").delete().match({ code: text })
-			if (error) ctx.reply("Nous n'avons pas pu supprimer ce code d'association, il expirera tout de même dans moins d'une heure. Veuillez signaler ce problème.").catch(err => { })
+	// Si le numéro est masqué, ne rien faire
+	if (num == "Numéro masqué") return ctx.answerCbQuery("Impossible de créer le contact puisque le numéro est masqué.").catch(err => { })
 
-			// Si on a des données, on vérifie qu'elles ne sont pas expirées
-			var infos = data?.[0]
-			if (infos?.created) {
-				var created = new Date(data.created)
-				if (created < new Date(Date.now() - (1000 * 60 * 50))) return ctx.reply("Oups, on dirait bien que ce code a expiré. Veuillez en générer un nouveau.").catch(err => { }) // 50 minutes
-			}
+	// Demander le nom du contact
+	ctx.reply(`Veuillez envoyer le nom du contact à ajouter au numéro "${num}"`).catch(err => { })
 
-			// On vérifie que l'utilisateur n'a pas déjà associé une box
-			var { data, error } = await supabase.from("users").select("*").eq("userId", ctx.message.from.id)
-			if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu vérifier si vous avez déjà associé une Freebox à votre compte. Veuillez signaler ce problème.").catch(err => { })
-			if (data?.length) return ctx.reply("Vous avez déjà associé une Freebox à votre compte, utiliser /logout pour la supprimer.").catch(err => { })
+	// On attend la réponse de l'utilisateur
+	if (waitingForReplies.find(e => e.userId == ctx.callbackQuery.from.id)) waitingForReplies = waitingForReplies.filter(e => e.userId != ctx.callbackQuery.from.id)
+	waitingForReplies.push({
+		userId: ctx.callbackQuery.from.id,
+		created: Date.now(),
+		type: "createcontact-via-btn",
+		ctx: ctx,
+		num: num
+	})
+})
 
-			// On associe le code à l'utilisateur
-			var { error } = await supabase.from("users").insert({
-				id: Date.now() + Math.floor(Math.random() * 1000000).toString(),
-				userId: ctx.message.from.id,
-				chatId: ctx.message.chat.id,
-				appId: "fbx.notifier",
-				appToken: infos?.content?.appToken,
-				apiDomain: infos?.content?.apiDomain,
-				httpsPort: infos?.content?.httpsPort,
-				boxModel: infos?.content?.boxModel,
-				created: new Date()
+bot.action('delete-voicemail', async (ctx) => {
+	// Obtenir les infos sur l'utilisateur
+	const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
+	const freebox = freeboxs.find(e => e.userId == userId)
+
+	// Récupérer les messages vocaux
+	var response = await freebox?.client?.fetch({
+		method: "GET",
+		url: "v10/call/voicemail/",
+		parseJson: true
+	});
+	count = response?.result?.length || 0
+
+	// Récupérer le dernier
+	response.result = response?.result?.sort((a, b) => b.date - a.date)
+	response = response?.result?.[0] || null
+
+	// Si on a pas de messages vocaux
+	if (!response) return ctx.answerCbQuery("Vous n'avez aucun message vocal.").catch(err => { })
+
+	// Supprimer le message vocal
+	var { error } = await freebox?.client?.fetch({
+		method: "DELETE",
+		url: `v10/call/voicemail/${response.id}/`
+	})
+
+	// Si on a pas pu supprimer le vocal
+	if (error) return ctx.answerCbQuery("Impossible de supprimer le message vocal : " + error.msg || error.message || error).catch(err => { })
+
+	// Répondre en disant qu'il a bien été supprimé
+	ctx.answerCbQuery(`Le message vocal a bien été supprimé. Il vous reste ${count - 1} message${count - 1 > 1 ? "s" : ""} vocal${count - 1 > 1 ? "s" : ""}.`).catch(err => { })
+})
+
+// Action du bouton "transcribe-voicemail"
+bot.action('transcribe-voicemail', async (ctx) => {
+	// Action du bouton annuler
+	var message = await ctx.reply("Vérification : Veuillez patienter").catch(err => { })
+	// Récupérer l'id du message
+	var messageId = message.message_id
+	var chatId = message.chat.id
+
+	// Si ffmpeg n'est pas installé avertir l'utilisateur
+	exec("ffmpeg -version", (error) => {
+		if (error) {
+			console.log(error)
+
+			// Modifier le message
+			return ctx.editMessageText({
+				chat_id: chatId,
+				message_id: messageId,
+				text: "Impossible de transcrire le message vocal : ffmpeg n'a pas pu être trouvé sur le système hébergeant le bot."
 			})
-			if (error) console.log(error)
-			if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu vous associer à votre Freebox. Veuillez signaler ce problème.").catch(err => { })
+		}
+	});
 
-			// On informe l'utilisateur que tout s'est bien passé
-			getSupabaseUsers() // On met à jour les utilisateurs
-			ctx.reply(`Votre compte Telegram a bien été associé à votre ${getFreeboxName(infos?.content?.boxModel)} !\n\nVous devrez peut-être attendre jusqu'à 5 minutes avant de pouvoir utiliser les commandes du bot, le temps que la synchronisation s'effectue.`).catch(err => { })
+	// Vérifier si python est installé
+	const command = process.platform === 'win32' ? 'python' : 'python3';
+	exec(`${command} --version`, (error, stdout, stderr) => {
+		if (error) {
+			console.log(error)
+			// Modifier le message
+			return ctx.editMessageText({
+				chat_id: chatId,
+				message_id: messageId,
+				text: "Impossible de transcrire le message vocal : Python n'a pas pu être vérifié sur le système hébergeant le bot."
+			})
+		}
+		if (!stdout.includes('Python 3')) {
+			return ctx.editMessageText({
+				chat_id: chatId,
+				message_id: messageId,
+				text: "Impossible de transcrire le message vocal : Python 3 n'est pas installé sur le système hébergeant le bot."
+			})
+		}
+	});
+
+	// Vérifier si pip est installé
+	exec(`${command} -m pip --version`, (error, stdout, stderr) => {
+		if (error) {
+			console.log(error)
+
+			// Modifier le message
+			return ctx.editMessageText({
+				chat_id: chatId,
+				message_id: messageId,
+				text: "Impossible de transcrire le message vocal : Pip n'a pas pu être vérifié sur le système hébergeant le bot."
+			})
+		}
+		if (!stdout.includes('pip')) {
+			return ctx.editMessageText({
+				chat_id: chatId,
+				message_id: messageId,
+				text: "Impossible de transcrire le message vocal : Pip n'est pas installé sur le système hébergeant le bot."
+			})
+		}
+	});
+
+	// Exécuter la commande pip install -U openai-whisper
+	exec(`pip install -U openai-whisper`, (error) => {
+		if (error) {
+			console.log(error)
+
+			// Modifier le message
+			return ctx.editMessageText({
+				chat_id: chatId,
+				message_id: messageId,
+				text: "Une erreur s'est produite lors de l'installation du module openai-whisper."
+			})
 		}
 	})
-}
+
+	// Executer la commande pip install setuptools-rust
+	exec(`pip install setuptools-rust`, (error) => {
+		if (error) {
+			console.log(error)
+			// Modifier le message
+			return ctx.editMessageText({
+				chat_id: chatId,
+				message_id: messageId,
+				text: "Une erreur s'est produite lors de l'installation du module setuptools-rust."
+			})
+		}
+	});
+
+	// Récupérer le chemin du fichier vocal
+	const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/getFile?file_id=${ctx.callbackQuery.message.audio.file_id}`);
+	const data = await response.json();
+	const filePath = data.result.file_path;
+
+	// Récupérer le fichier vocal grâce a fetch
+	const fileResponse = await fetch(`https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${filePath}`);
+	const fileData = await fileResponse.buffer();
+
+	// Ecrire les données du fichier
+	fs.writeFileSync(`${messageId}.ogg`, fileData)
+
+	// Ajouter le bouton annuler
+	replyMarkup = {
+		inline_keyboard: [
+			[
+				{
+					text: "Annuler",
+					callback_data: `cancel-${messageId}`,
+
+				}
+			]
+		]
+	};
+	ctx.editMessageText({
+		chat_id: chatId,
+		message_id: messageId,
+		text: "Transcription en cours...",
+		reply_markup: replyMarkup
+	})
+	// Executer le script python
+	const pythonProcess = exec(`${command} transcribe/main.py ${messageId}.ogg`, { maxBuffer: 1024 * 10000 }, async (error, stdout, stderr) => {
+		// Stocker la sortie standard
+		// Si on a une erreur
+		if (error || stderr) {
+			// Si l'erreur est que transcribe/main.py n'existe pas
+			if (stderr.includes("No such file or directory")) {
+				// Modifier le message
+				return ctx.editMessageText({
+					chat_id: chatId,
+					message_id: messageId,
+					text: `Le script Python n'a pas été trouvé. Vérifiez que le chemin ${__dirname}/transcribe/main.py existe.`
+				})
+			}
+			// Supprimer le fichier
+			try { fs.unlinkSync(`${messageId}.ogg`) } catch (err) { }
+
+			// Modifier le message
+			return ctx.editMessageText({
+				parse_mode: "html",
+				chat_id: chatId,
+				message_id: messageId,
+				text: "Une erreur s'est produite lors de la transcription du message vocal. Vous pouvez signaler cette erreur :\n<pre>\n" + (escapeHtml(stderr || error || "Aucune erreur trouvée.")) + "\n</pre>"
+			}).catch(err => { })
+		}
+
+		if (error) return ctx.editMessageText("Une erreur s'est produite lors de l'exécution du script Python.", error).catch(err => { });
+		if (stderr) return ctx.editMessageText("Une erreur s'est produite lors de l'exécution du script Python.", stderr).catch(err => { });
+
+		// On envoie la transcription en modifiant le message
+		ctx.editMessageText({
+			chat_id: chatId,
+			message_id: messageId,
+			text: stdout
+		}).catch(err => { })
+		// Supprimer le bouton annuler
+		replyMarkup = null
+		// Supprimer le fichier
+		fs.unlinkSync(`${messageId}.ogg`).catch(err => { })
+	});
+
+	bot.action(`cancel-${messageId}`, async (ctx) => {
+		// Supprimer le message
+		ctx.deleteMessage().catch(err => { })
+		// Envoyer un signal SIGQUIT au script python et dire que ça a bien été annulé
+		process.kill(pythonProcess.pid, 'SIGQUIT');
+
+		var chatId = ctx.callbackQuery.message.chat.id
+		await bot.telegram.sendMessage(chatId, "La transcription a bien été annulée.").catch(err => { })
+
+		// Supprimer le fichier
+		fs.unlinkSync(`${messageId}.ogg`).catch(err => { })
+		return
+	})
+});
+
+
+// Action du bouton "Supprimer le contact"
+bot.action('deletecontact', async (ctx) => {
+	// Déterminer le nom du contact
+	var message = ctx.callbackQuery.message.text
+
+	// Le nom se trouve après "du contact" et se trouve entre guillemet
+	var name = message.split("du contact")[1].split('"')[1].trim()
+
+	// Supprimer le contact
+	await deleteContact(name, ctx)
+
+	// Supprimer le message
+	ctx.deleteMessage().catch(err => { })
+})
+
+// Détecter l'envoi d'un message
+// Note: Ce code doit rester en dessous des autres commandes.
+bot.on('message', async (ctx) => {
+	// Empêcher un message envoyé avant le démarrage du bot d'être traité
+	if (ctx?.message?.date && ctx.message.date < Math.floor(Date.now() / 1000) - 10) return console.log("Un message envoyé avant le démarrage du bot a été ignoré.")
+
+	// Texte originale
+	var text = ctx?.message?.text || ctx?.callbackQuery?.message?.text
+	if (text) text = text.trim()
+	if (!text) return
+
+	// Auteur du message
+	var author = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
+
+	// Récupérer le message et vérifier que c'est un code
+	var parsedText = parseInt(text)
+	if (!parsedText || (parsedText && (isNaN(parsedText) || text.length != 6))) { // Si c'est PAS un code
+		// On récupère si on doit attendre une réponse de l'utilisateur
+		var waitingForReply = waitingForReplies.find(e => e.userId == author)
+		if (!waitingForReply) return // Si on attend pas de réponse, on ne fait rien
+		if (waitingForReply.created < Date.now() - (1000 * 60 * 10)) waitingForReplies = waitingForReplies.filter(e => e.userId != author) // On laisse max 10 minutes pour répondre
+
+		// On récupère le type de réponse qu'on attend
+		var type = waitingForReply.type
+		if (type == "createcontact-via-cmd") { // Si on attend une réponse pour créer un contact via la commande
+			// On récupère le nom et le numéro
+			var name = text.split(",")[0];
+			var num = text.split(",")[1];
+
+			// Si il n y a pas de virgule expliquez comment il faut faire.
+			if (!name) return ctx.replyWithHTML("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : <b>Jean</b>, 0123456789").catch(err => { })
+			if (!num) return ctx.replyWithHTML("Veuillez envoyer le nom du contact ainsi que son numéro, séparé par une virgule\nExemple : Jean, <b>0123456789</b>").catch(err => { })
+
+			// Enlever les espaces du numéro
+			num = num.trim()
+
+			// Si numero ne contient pas que des chiffres
+			if (num.match(/[^0-9]/g)) return ctx.reply("Le numéro ne peut contenir que des chiffres.").catch(err => { })
+
+			// On créé le contact
+			var created = await createContact(name, num, ctx);
+
+			// Si il y a une erreur, informer l'utilisateur
+			if (created != true) return ctx.reply(`Une erreur est survenue${created == false ? '...' : ` : ${created}`}`).catch(err => { })
+			else ctx.reply("Le contact a bien été créé.").catch(err => { })
+
+			// On supprime l'attente
+			waitingForReplies = waitingForReplies.filter(e => e.userId != author)
+		}
+		else if (type == "createcontact-via-btn") { // Si on attend une réponse pour créer un contact via le bouton
+			// On créé le contact
+			var created = await createContact(text, waitingForReply.num, ctx);
+
+			// Si il y a une erreur, informer l'utilisateur
+			if (created != true) return ctx.reply(`Une erreur est survenue${created == false ? '...' : ` : ${created}`}`).catch(err => { })
+			else ctx.reply("Le contact a bien été créé.").catch(err => { })
+
+			// On supprime l'attente
+			waitingForReplies = waitingForReplies.filter(e => e.userId != author)
+		}
+		else if (type == "contact") { // Si on attend une réponse pour chercher un contact
+			// On récupère le nom
+			var name = text;
+
+			// On récupère le contact
+			await getContact(name, ctx)
+
+			// On supprime l'attente
+			waitingForReplies = waitingForReplies.filter(e => e.userId != author)
+		}
+		else if (type == "deletecontact") { // Si on attend une réponse pour supprimer un contact
+			// On récupère le nom
+			var name = text;
+
+			// On supprime le contact
+			await deleteContact(name, ctx)
+
+			// On supprime l'attente
+			waitingForReplies = waitingForReplies.filter(e => e.userId != author)
+		}
+
+	} else { // Si c'est un code valide :
+		// Obtenir le code unique dans la base de données
+		var { data, error } = await supabase.from("uniquecode").select("*").eq("code", text)
+		if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu récupérer les informations de ce code dans la base des données. Veuillez signaler ce problème.").catch(err => { })
+
+		// Si on a pas de données
+		if (!data?.length) return ctx.reply("Oups, on dirait bien que ce code n'existe pas. Celui-ci a peut-être expiré, ou est mal écrit. Dans le cas où vous hébergez vous-même le service, vérifier que vous avez entré la bonne URL d'API lors de l'utilisation du CLI.").catch(err => { })
+
+		// Si on a un code, on l'associe à l'utilisateur
+		var { error } = await supabase.from("uniquecode").delete().match({ code: text })
+		if (error) ctx.reply("Nous n'avons pas pu supprimer ce code d'association, il expirera tout de même dans moins d'une heure. Veuillez signaler ce problème.").catch(err => { })
+
+		// Si on a des données, on vérifie qu'elles ne sont pas expirées
+		var infos = data?.[0]
+		if (infos?.created) {
+			var created = new Date(data.created)
+			if (created < new Date(Date.now() - (1000 * 60 * 50))) return ctx.reply("Oups, on dirait bien que ce code a expiré. Veuillez en générer un nouveau.").catch(err => { }) // 50 minutes
+		}
+
+		// On vérifie que l'utilisateur n'a pas déjà associé une box
+		var { data, error } = await supabase.from("users").select("*").eq("userId", ctx.message.from.id)
+		if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu vérifier si vous avez déjà associé une Freebox à votre compte. Veuillez signaler ce problème.").catch(err => { })
+		if (data?.length) return ctx.reply("Vous avez déjà associé une Freebox à votre compte, utiliser /logout pour la supprimer.").catch(err => { })
+
+		// On associe le code à l'utilisateur
+		var { error } = await supabase.from("users").insert({
+			id: Date.now() + Math.floor(Math.random() * 1000000).toString(),
+			userId: ctx.message.from.id,
+			chatId: ctx.message.chat.id,
+			appId: "fbx.notifier",
+			appToken: infos?.content?.appToken,
+			apiDomain: infos?.content?.apiDomain,
+			httpsPort: infos?.content?.httpsPort,
+			boxModel: infos?.content?.boxModel,
+			created: new Date()
+		})
+		if (error) console.log(error)
+		if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu vous associer à votre Freebox. Veuillez signaler ce problème.").catch(err => { })
+
+		// On informe l'utilisateur que tout s'est bien passé
+		getSupabaseUsers() // On met à jour les utilisateurs
+		ctx.reply(`Votre compte Telegram a bien été associé à votre ${getFreeboxName(infos?.content?.boxModel)} !\n\nVous devrez peut-être attendre jusqu'à 5 minutes avant de pouvoir utiliser les commandes du bot, le temps que la synchronisation s'effectue.`).catch(err => { })
+	}
+})
 main().catch((err) => console.error(err));
 
 // Détecter en temps réel les messages vocaux
@@ -686,6 +687,9 @@ async function logVoices() {
 	while (true) {
 		// Pour chaque box
 		for (const freebox of freeboxs) {
+			// Si la box est injoinable
+			if (!freebox?.client || freebox?.injoinable) continue
+
 			// Obtenir les derniers appels
 			var response = await freebox?.client?.fetch({
 				method: "GET",
@@ -788,7 +792,7 @@ async function logCalls() {
 
 			// Si la box est vrm injoinable
 			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`) {
-				if (!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => {
+				if (!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Il semblerait que votre Freebox soit injoignable. L'accès à Internet a peut-être été coupé.").catch(err => {
 					if (err.code == "ECONNRESET" || err.code == "ECONNREFUSED" || err.code == "ETIMEDOUT" || err.code == "ENOTFOUND" || err.code == "EAI_AGAIN" || err.code == "ECONNABORTED") return
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
 					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
@@ -886,6 +890,10 @@ async function enableWps(ctx) {
 	var selected
 	var now = Date.now()
 	const freebox = freeboxs.find(e => e.userId == ctx.message.from.id)
+
+	// Si la box est injoinable
+	if (!freebox?.client) return ctx.reply("La connexion à votre box n'a pas encore eu lieu, veuillez patienter quelques instants.").catch(err => { })
+	if (freebox?.injoinable) return ctx.reply("Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => { })
 
 	// Obtenir les cartes réseaux et leurs ids
 	var response = await freebox?.client?.fetch({
@@ -994,12 +1002,31 @@ async function myNumber(ctx) {
 	const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
 	const freebox = freeboxs.find(e => e.userId == userId)
 
+	// Si la box est injoinable
+	if (!freebox?.client) return ctx.reply("La connexion à votre box n'a pas encore eu lieu, veuillez patienter quelques instants.").catch(err => { })
+	if (freebox?.injoinable) return ctx.reply("Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => { })
+
+	// Si on a déjà mit le numéro en cache
+	if (freebox?.phone_number){
+		// S'il a expiré
+		if (freebox?.phone_number?.expires < Date.now()) delete freebox.phone_number // On le supprime
+
+		// Sinon, on le retourne
+		else return freebox.phone_number.number
+	}
+
 	// Requête pour récupérer quelques informations sur le compte
 	var response = await freebox?.client?.fetch({
 		method: "GET",
 		url: "v10/call/account/",
 		parseJson: true
 	})
+
+	// Mettre en cache et retourner l'info
+	if(response?.result?.phone_number) freebox.phone_number = {
+		number: response?.result?.phone_number,
+		expires: Date.now() + (1000 * 60 * 60 * 24) // 24h
+	}
 	return response?.result?.phone_number;
 }
 
@@ -1008,6 +1035,10 @@ async function getContact(name, ctx) {
 	// Obtenir les infos sur l'utilisateur
 	const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
 	const freebox = freeboxs.find(e => e.userId == userId)
+
+	// Si la box est injoinable
+	if (!freebox?.client) return ctx.reply("La connexion à votre box n'a pas encore eu lieu, veuillez patienter quelques instants.").catch(err => { })
+	if (freebox?.injoinable) return ctx.reply("Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => { })
 
 	// On récupère les contacts
 	var response = await freebox?.client?.fetch({
@@ -1102,6 +1133,10 @@ async function deleteContact(name, ctx) {
 async function sendVoicemail(userId, voiceId, number) {
 	// Obtenir les infos sur l'utilisateur
 	const freebox = freeboxs.find(e => e.userId == userId)
+
+	// Si la box est injoinable
+	if (!freebox?.client) return bot.telegram.sendMessage(userId, "La connexion à votre box n'a pas encore eu lieu, veuillez patienter quelques instants.").catch(err => { })
+	if (freebox?.injoinable) return bot.telegram.sendMessage(userId, "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => { })
 
 	// Obtenir les messages vocaux
 	if (!voiceId) {
