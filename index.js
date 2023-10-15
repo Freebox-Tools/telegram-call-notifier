@@ -78,6 +78,18 @@ var freeboxs = []
 // Liste des réponses d'utilisateur qu'on attend
 var waitingForReplies = []
 
+// Fonction pour vérifier si ON a accès à internet
+async function checkInternet() {
+	// On vérifie si on a accès à internet
+	var response = await fetch("http://cloudflare.com", { // en théorie il devrait jamais down
+		headers: { 'User-Agent': 'test' } // Cloudflare retourne la réponse plus vite
+	}).catch(err => { return null })
+
+	// Si on a pas de réponse, on retourne false
+	if (!response) return false
+	else return true
+}
+
 // Fonction pour échapper les caractères spéciaux et envoyer un msg via html
 function escapeHtml(text) {
 	// Si y'a pas de texte, le retourner directement
@@ -796,6 +808,10 @@ async function logCalls() {
 
 			// Si la box est vrm injoinable
 			if (typeof response?.msg == "object" && JSON.stringify(response) == `{"success":false,"msg":{},"json":{}}`) {
+				// On vérifie qu'on a accès à internet NOUS (belek le gars sa box elle a pas down c'est nous qui avons pas internet ptdrrr)
+				if (!await checkInternet()) return console.log("On dirait que nous n'avons pas accès à Internet.")
+
+				// On envoie le msg et on définit la box comme injoinable
 				if (!freebox.injoinable) bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Il semblerait que votre Freebox soit injoignable. L'accès à Internet a peut-être été coupé.").catch(err => {
 					if (err.code == "ECONNRESET" || err.code == "ECONNREFUSED" || err.code == "ETIMEDOUT" || err.code == "ENOTFOUND" || err.code == "EAI_AGAIN" || err.code == "ECONNABORTED") return
 					console.log(`Impossible de contacter l'utilisateur ${freebox.chatId || freebox.userId} : `, err)
