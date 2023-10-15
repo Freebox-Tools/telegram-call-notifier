@@ -970,7 +970,7 @@ async function enableWpsRequest(ctx, freebox, selected) {
 	});
 
 	// Si il y a une erreur, on répond avec
-	if (!response?.success) await ctx.reply(response.error_code == 'busy' ? "Une association est déjà en cours, patienter quelques minutes avant de réessayer." : (response?.msg || response?.message || response || "Impossible d'activer le WPS sur ce réseau.")).catch(err => { })
+	if (!response?.success) await ctx.reply(response.error_code == 'busy' ? "Une association est déjà en cours, patienter quelques minutes avant de réessayer." : (response?.msg || response?.message || response || "Impossible d'activer le WPS sur ce réseau.").replace("Cette application n'est pas autorisée à accéder à cette fonction", "Cette application n'est pas autorisée à accéder à cette fonction. https://github.com/Freebox-Tools/telegram-call-notifier/wiki/Autoriser-l'activation-du-WPS")).catch(err => { })
 	else await ctx.reply(`Le WPS a bien été activé sur "${selected?.ssid || "le réseau"}".`).catch(err => { })
 }
 
