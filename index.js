@@ -330,6 +330,10 @@ bot.action('delete-voicemail', async (ctx) => {
 	const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
 	const freebox = freeboxs.find(e => e.userId == userId)
 
+	// Si la box est injoinable
+	if (!freebox?.client) return ctx.answerCbQuery("La connexion à votre box n'a pas encore eu lieu, veuillez patienter quelques instants.").catch(err => { })
+	if (freebox?.injoinable) return ctx.answerCbQuery("Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => { })
+
 	// Récupérer les messages vocaux
 	var response = await freebox?.client?.fetch({
 		method: "GET",
@@ -976,6 +980,10 @@ async function createContact(name, num, ctx) {
 	const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
 	const freebox = freeboxs.find(e => e.userId == userId)
 
+	// Si la box est injoinable
+	if (!freebox?.client) return "La connexion à votre box n'a pas encore eu lieu, veuillez patienter quelques instants."
+	if (freebox?.injoinable) return "Votre Freebox est injoignable. L'accès à Internet est peut-être coupé."
+
 	// Créer un contact
 	var response = await freebox?.client?.fetch({
 		method: "POST",
@@ -1103,6 +1111,10 @@ async function deleteContact(name, ctx) {
 	// Obtenir les infos sur l'utilisateur
 	const userId = ctx?.message?.from?.id || ctx?.update?.callback_query?.from?.id || ctx?.callbackQuery?.from?.id
 	const freebox = freeboxs.find(e => e.userId == userId)
+
+	// Si la box est injoinable
+	if (!freebox?.client) return ctx.reply("La connexion à votre box n'a pas encore eu lieu, veuillez patienter quelques instants.").catch(err => { })
+	if (freebox?.injoinable) return ctx.reply("Votre Freebox est injoignable. L'accès à Internet est peut-être coupé.").catch(err => { })
 
 	// On récupère les contacts
 	var response = await freebox?.client?.fetch({
