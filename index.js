@@ -534,7 +534,7 @@ bot.action('transcribe-voicemail', async (ctx) => {
 		await bot.telegram.sendMessage(chatId, "La transcription a bien été annulée.").catch(err => { })
 
 		// Supprimer le fichier
-		fs.unlinkSync(`${messageId}.ogg`).catch(err => { })
+		try { fs.unlinkSync(`${messageId}.ogg`) } catch (err) { }
 		return
 	})
 });
