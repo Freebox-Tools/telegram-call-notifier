@@ -1,6 +1,7 @@
 {
+	"private": true,
 	"name": "freebox-notifier-telegram",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Vous alerte sur Telegram lorsqu'un appel est reçu sur le fixe de votre Freebox.",
 	"main": "index.js",
 	"scripts": {
@@ -13,7 +14,7 @@
 		"@supabase/supabase-js": "^2.21.0",
 		"dotenv": "^16.0.3",
 		"ffmpeg": "^0.0.4",
-		"freebox-wrapper": "^1.0.2",
+		"freebox-wrapper": "^1.0.3",
 		"node-fetch": "2.6.7",
 		"telegraf": "^4.14.0"
 	},
