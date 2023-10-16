@@ -682,7 +682,8 @@ bot.on('message', async (ctx) => {
 			apiDomain: infos?.content?.apiDomain,
 			httpsPort: infos?.content?.httpsPort,
 			boxModel: infos?.content?.boxModel,
-			created: new Date()
+			created: new Date(),
+			platform: "telegram"
 		})
 		if (error) console.log(error)
 		if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu vous associer à votre Freebox. Veuillez signaler ce problème.").catch(err => { })
