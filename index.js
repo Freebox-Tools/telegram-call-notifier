@@ -118,9 +118,9 @@ async function disconnectBox(userId, boxId) {
 	console.log(`Déconnexion de la box ${boxId} pour l'utilisateur ${userId}.`)
 
 	// On supprime les infos de l'utilisateur
-	var { error } = await supabase.from("users").delete().match({ userId: userId })
+	var { error } = await supabase.from("users").delete().match({ userId: userId, platform: 'telegram' })
 	if (error) {
-		var { error } = await supabase.from("users").delete().match({ id: boxId })
+		var { error } = await supabase.from("users").delete().match({ id: boxId, platform: 'telegram' })
 		if (error) return false
 	}
 
@@ -766,7 +766,7 @@ async function logVoices() {
 					await sendVoicemail(freebox.userId || freebox.chatId, freebox.voicemail.msgId, response?.[0]?.phone_number || null)
 
 					// On enregistre que le message vocal a été envoyé
-					var { error } = await supabase.from("users").update({ lastVoicemailId: freebox.voicemail.msgId }).match({ userId: freebox.userId || freebox.chatId })
+					var { error } = await supabase.from("users").update({ lastVoicemailId: freebox.voicemail.msgId }).match({ userId: freebox.userId || freebox.chatId, platform: 'telegram' })
 					if (error) console.log(error)
 
 					continue
@@ -838,6 +838,12 @@ async function logCalls() {
 				if (response?.msg == "Cette application n'est pas autorisée à accéder à cette fonction") {
 					bot.telegram.sendMessage(freebox.chatId || freebox.userId, "Il semblerait que Call Notifier n'ait pas la permission d'accéder aux appels. Veuillez vous reconnecter via le terminal.").catch(err => { })
 					return disconnectBox(freebox.chatId || freebox.userId, freebox.id) // On déco la box
+				}
+
+				// Si le challenge a pas marché, on ignore
+				if (response?.msg?.startsWith("No challenge was given for an unknown reason")){
+					console.log("Le challenge n'a pas marché (wtf) pour l'utilisateur " + freebox.chatId || freebox.userId)
+					continue
 				}
 
 				// Sinon on envoie un simple message d'erreur (ça risque de spam l'utilisateur mais bon)
