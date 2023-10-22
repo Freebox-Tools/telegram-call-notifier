@@ -17,7 +17,7 @@ var freeboxs = []
 var users = []
 async function getSupabaseUsers() {
 	// On obtient les utilisateurs
-	var { data, error } = await supabase.from("users").select("*")
+	var { data, error } = await supabase.from("users").select("*").match({ platform: 'telegram' })
 	if (error) return console.log(error)
 	users = data // on enregistre
 
@@ -690,7 +690,7 @@ bot.on('message', async (ctx) => {
 
 		// On informe l'utilisateur que tout s'est bien passé
 		getSupabaseUsers() // On met à jour les utilisateurs
-		ctx.reply(`Votre compte Telegram a bien été associé à votre ${getFreeboxName(infos?.content?.boxModel)} !\n\nVous devrez peut-être attendre jusqu'à 5 minutes avant de pouvoir utiliser les commandes du bot, le temps que la synchronisation s'effectue.`).catch(err => { })
+		ctx.reply(`Votre compte Telegram a bien été associé à votre Freebox ${getFreeboxName(infos?.content?.boxModel)} !\n\nVous devrez peut-être attendre jusqu'à 5 minutes avant de pouvoir utiliser les commandes du bot, le temps que la synchronisation s'effectue.`).catch(err => { })
 	}
 })
 main().catch((err) => console.error(err));
@@ -799,6 +799,14 @@ async function logCalls() {
 			// On définit des variables de base
 			if (!freebox.injoinable) freebox.injoinable = false
 			if (!freebox.lastID) freebox.lastID = null
+
+			// Si la box est injoinable, on vérifie la dernière fois qu'on a check son état
+			if (freebox?.injoinable) {
+				// Si on a pas vérifier depuis plus de 10 minutes, on vérifie
+				if (freebox.lastStatusCheck && freebox.lastStatusCheck < Date.now() - (1000 * 60 * 10)) {
+					freebox.lastStatusCheck = Date.now()
+				} else continue
+			}
 
 			// Obtenir les derniers appels
 			var response = await freebox?.client?.fetch({
