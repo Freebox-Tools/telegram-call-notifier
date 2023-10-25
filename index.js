@@ -533,7 +533,7 @@ bot.action('transcribe-voicemail', async (ctx) => {
 		// Supprimer le bouton annuler
 		replyMarkup = null
 		// Supprimer le fichier
-		fs.unlinkSync(`${messageId}.ogg`).catch(err => { })
+		try { fs.unlinkSync(`${messageId}.ogg`) } catch (err) { }
 	});
 
 	bot.action(`cancel-${messageId}`, async (ctx) => {
@@ -803,6 +803,7 @@ async function logCalls() {
 			// Si la box est injoinable, on vérifie la dernière fois qu'on a check son état
 			if (freebox?.injoinable) {
 				// Si on a pas vérifier depuis plus de 10 minutes, on vérifie
+				if(!freebox.lastStatusCheck) freebox.lastStatusCheck = Date.now() // définir la dernière vérif si on l'a jamais vérifier
 				if (freebox.lastStatusCheck && freebox.lastStatusCheck < Date.now() - (1000 * 60 * 10)) {
 					freebox.lastStatusCheck = Date.now()
 				} else continue
