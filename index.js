@@ -672,6 +672,18 @@ bot.on('message', async (ctx) => {
 		if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu vérifier si vous avez déjà associé une Freebox à votre compte. Veuillez signaler ce problème.").catch(err => { })
 		if (data?.length) return ctx.reply("Vous avez déjà associé une Freebox à votre compte, utiliser /logout pour la supprimer.").catch(err => { })
 
+		// On vérifie que la freebox n'a pas déjà été associée à un compte
+		var { data, error } = await supabase.from("users").select("*").eq("apiDomain", infos?.content?.apiDomain).eq("httpsPort", infos?.content?.httpsPort)
+		if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu vérifier si cette Freebox a déjà été associé à quelqu'un. Veuillez signaler ce problème.")
+		if (data?.length){
+			// On l'a supprime
+			var { error } = await supabase.from("users").delete().match({ apiDomain: infos?.content?.apiDomain, httpsPort: infos?.content?.httpsPort })
+			if (error) return ctx.reply("Une erreur est survenue et nous n'avons pas pu supprimer les données déjà existante de la Freebox. Veuillez signaler ce problème.")
+
+			// On prévient l'utilisateur
+			ctx.reply(`Cette Freebox a déjà été associé à un compte via ${data?.[0]?.platform}. Nous avons déconnecté votre Freebox de cet utilisateur pour permettre votre connexion.`).catch(err => { })
+		}
+
 		// On associe le code à l'utilisateur
 		var { error } = await supabase.from("users").insert({
 			id: Date.now() + Math.floor(Math.random() * 1000000).toString(),

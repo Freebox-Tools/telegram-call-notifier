@@ -1,14 +1,20 @@
-# Freebox Call Notifier
+# Freebox Call Notifier — Telegram
 
 ## Description
 
-Call Notifier est un bot Telegram vous permettant de recevoir une notification lors d'un appel entrant sur votre Freebox pour savoir si l'appel vaut vraiment le coup ou non.
+Call Notifier est un bot multi-plateforme vous permettant de recevoir une notification lors d'un appel entrant sur votre Freebox, pour savoir si l'appel vaut vraiment le coup ou non.
 
 Call Notifier vous informe avant même que votre téléphone ne sonne ! Il indique le numéro de téléphone de l'appelant, et le nom de votre contact si celui-ci est enregistré dans le répertoire de la Freebox.
 
 <a href="https://t.me/freebox_call_notifier_bot"> <img src="assets/on-telegram.png"> </a>
 
 Si vous souhaitez l'hébergez vous même rendez-vous sur le [Wiki](https://github.com/Freebox-Tools/telegram-call-notifier/wiki/H%C3%A9berger-soi%E2%80%90m%C3%AAme)
+
+
+## Plateformes
+
+- [Telegram](https://t.me/freebox_call_notifier_bot)
+- [Discord via Bachero](https://github.com/Freebox-Tools/bachero-call-notifier/)
 
 
 ## Fonctionnalités
